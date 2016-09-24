@@ -1,0 +1,29 @@
+<html>
+<body>
+<pre>
+<h1>Build Log</h1>
+<h3>
+--------------------Configuration: MFCDynCreate - Win32 Debug--------------------
+</h3>
+<h3>Command Lines</h3>
+Creating temporary file "C:\Users\lijinya\AppData\Local\Temp\RSPD2CB.tmp" with contents
+[
+/nologo /MTd /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /Fp"Debug/MFCDynCreate.pch" /Yu"stdafx.h" /Fo"Debug/" /Fd"Debug/" /FD /GZ /c 
+"D:\mfc\day05\codes\MFCDynCreate\MFCDynCreate.cpp"
+]
+Creating command line "cl.exe @C:\Users\lijinya\AppData\Local\Temp\RSPD2CB.tmp" 
+Creating command line "link.exe /nologo /subsystem:console /incremental:yes /pdb:"Debug/MFCDynCreate.pdb" /debug /machine:I386 /out:"Debug/MFCDynCreate.exe" /pdbtype:sept  .\Debug\MFCDynCreate.obj .\Debug\StdAfx.obj .\Debug\MFCDynCreate.res "
+<h3>Output Window</h3>
+Compiling...
+MFCDynCreate.cpp
+Linking...
+LINK : fatal error LNK1168: cannot open Debug/MFCDynCreate.exe for writing
+Error executing link.exe.
+
+
+
+<h3>Results</h3>
+MFCDynCreate.exe - 1 error(s), 0 warning(s)
+</pre>
+</body>
+</html>

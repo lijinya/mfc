@@ -1,0 +1,39 @@
+<html>
+<body>
+<pre>
+<h1>Build Log</h1>
+<h3>
+--------------------Configuration: MFCCollection - Win32 Debug--------------------
+</h3>
+<h3>Command Lines</h3>
+Creating temporary file "C:\Users\lijinya\AppData\Local\Temp\RSP2901.tmp" with contents
+[
+/nologo /MDd /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /D "_AFXDLL" /FR"Debug/" /Fp"Debug/MFCCollection.pch" /Yc"stdafx.h" /Fo"Debug/" /Fd"Debug/" /FD /GZ  /c 
+"D:\mfc\day08\codes\MFCCollection\StdAfx.cpp"
+]
+Creating command line "cl.exe @C:\Users\lijinya\AppData\Local\Temp\RSP2901.tmp" 
+Creating temporary file "C:\Users\lijinya\AppData\Local\Temp\RSP2902.tmp" with contents
+[
+/nologo /MDd /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /D "_AFXDLL" /FR"Debug/" /Fp"Debug/MFCCollection.pch" /Yu"stdafx.h" /Fo"Debug/" /Fd"Debug/" /FD /GZ  /c 
+"D:\mfc\day08\codes\MFCCollection\MFCCollection.cpp"
+]
+Creating command line "cl.exe @C:\Users\lijinya\AppData\Local\Temp\RSP2902.tmp" 
+<h3>Output Window</h3>
+Compiling...
+StdAfx.cpp
+Compiling...
+MFCCollection.cpp
+Creating command line "link.exe /nologo /subsystem:console /incremental:yes /pdb:"Debug/MFCCollection.pdb" /debug /machine:I386 /out:"Debug/MFCCollection.exe" /pdbtype:sept  .\Debug\StdAfx.obj .\Debug\MFCCollection.obj "
+<h3>Output Window</h3>
+Linking...
+Creating command line "bscmake.exe /nologo /o"Debug/MFCCollection.bsc"  .\Debug\StdAfx.sbr .\Debug\MFCCollection.sbr"
+Creating browse info file...
+<h3>Output Window</h3>
+
+
+
+<h3>Results</h3>
+MFCCollection.exe - 0 error(s), 0 warning(s)
+</pre>
+</body>
+</html>

@@ -1,0 +1,303 @@
+一MFC视图
+	1,相关问题
+	视图窗口	--一个数据的窗口,可以喝用户进行交互操作
+	MFC视图类CView及其子类
+	2.视图窗口的使用            框架窗口带标题栏,是父窗口,而视图窗口不带标题栏,是子窗口
+	2.1将CView类派生自己的视图类(CMyView),并需要重写一个虚函数OnDraw
+	在框架窗口的WM_CREATE消息中创建视图窗口
+
+	处理WM_PAINT消息,则OnDraw()不执行
+	一个框架窗口,可以包含多个视图窗口,但只有一个是活动窗口,具有焦点。鼠标点击可以获取焦点。
+
+	
+      theApp
+	|->m_hMainWnd(保存框架类对象地址)
+		|->m_pViewActive(保存视图类对象地址)
+	
+	3.命令消息处理。(WM_COMMAND)
+	CFrameWnd::OnCmdMsg内部代码执行顺序
+	  1利用GetActiveView获取视图类对象地址,遍历视图类这个支脉链表查找消息的处理pView->OnCmdMsg
+	  2.利用隐含的this指针(pFrame)调用OnCmdMsg,遍历框架类这个支脉链表查找消息处理
+	  3.利用theApp对象四肢调用OnCmdMsg,遍历应用程序类这个支脉链表查找消息处理。
+	View--->Frame--->App
+
+二.运行时类信息机制
+	1.运行时类信息机制的作用
+		在程序运行过程中,可以判断类对象的相关类的信息以及继承派生关系
+	2.使用
+	  2.1 类必须派生自CObject
+	  2.2 类内部必须添加声明宏 DECLARE_DYNAMIC(theClass)
+	  2.3 类外添加实现宏
+		IMPLEMENT_DYNAMIC(theClass,baseClass)
+		
+	CObject::IsKindOf 
+
+
+
+
+struct CRuntimeClass
+{
+// Attributes
+	LPCSTR m_lpszClassName;//类名称
+	int m_nObjectSize;	//类的大小sizeof
+	UINT m_wSchema; // schema number of the loaded class	//类的版本
+	CObject* (PASCAL* m_pfnCreateObject)(); // NULL => abstract class
+	//动态创建机制使用(运行时类信息为NULL)
+#ifdef _AFXDLL
+	CRuntimeClass* (PASCAL* m_pfnGetBaseClass)();
+#else
+	CRuntimeClass* m_pBaseClass;		//xxxxx
+#endif
+
+// Operations
+	CObject* CreateObject();
+	BOOL IsDerivedFrom(const CRuntimeClass* pBaseClass) const;
+
+// Implementation
+	void Store(CArchive& ar) const;
+	static CRuntimeClass* PASCAL Load(CArchive& ar, UINT* pwSchemaNum);
+
+	// CRuntimeClass objects linked together in simple list
+	CRuntimeClass* m_pNextClass;       // linked list of registered classes  //NULL
+};
+
+
+#define RUNTIME_CLASS(class_name) ((CRuntimeClass*)(&class_name::class##class_name))
+
+4展开的各部分
+	classCDog  --静态变量  保存了类的相关信息  类名/大小/版本....
+	GeyRuntimeClass  虚函数
+		获取CDog类的静态变量地址(&classCDog),(获取链表头结点)
+
+	RUNTIME_CLASS(类名) -获取括号中指明的类的静态变量的地址
+
+
+
+5 IsKindOf函数执行过程
+	5.1获取对象所属类的静态变量地址(&classCDog)
+	5.2拿着这个静态变量&classCDog和被判断类型&classCObject进行比较  如果相等证明对象属于该类
+	5.3如果不相等 获取父类的静态变量地址与被判断类&classCObject循环进行比较，只要有相等情况证
+	明对象属于该类
+	5.4无相等情况证明对象不属于该类。
+
+三动态创建机制
+	1.动态创建机制的作用
+		在不知道类名的情况下,将类的对象创建出来。
+	2.动态创建的使用
+	  1.类必须派生自CObject
+	  2.类内部添加声明宏  DECLARE_DYNCREATE(theClass)
+	  3.类外添加实现宏    IMPLEMENT_DYNCREATE(theClass,baseClass)
+
+	利用CRuntimeClass::CreateObject动态创建对象
+	3.宏展开各部分作用
+	3.1静态变量有变化
+		AFX_COMDAT const AFX_DATADEF CRuntimeClass CDog::classCDog = {
+		"CDog",			//
+		sizeof(class CDog),
+		0xFFFF,
+		CDog::CreateObject, //
+		RUNTIME_CLASS(CAnimal),	//
+		NULL 
+	}; 
+	3.2多了一个静态函数CreateObject
+		new 一个对象,病将对象地址返回。
+	4.执行过程
+		4.1首先获取CDog类的静态变量地址(&CDog::classCDog)
+		4.2利用这个函数地址调用CRuntimeClass::CreateObject函数
+		4.3在这个函数内部调用CDog::classCDog静态变量的第四个成员(CDog::CreateObject)
+		4.4在这个函数new了一个CDog类的对象,并返回对象地址。
+四。窗口的切分
+	窗口切分相关问题
+	1.静态切分  窗口在创建时就完成切分,可以切分多个视图窗口 最多16*16
+	2.动态切分  程序在运行过程中,根据用户需要实时切分  最多2*2 多个窗口,但是是统一类型的
+
+	CSpiltterWnd  -父类为CWnd,一种框架类           CFrameWnd 口字型
+
+	静态切分
+		重写虚函数CFrameWnd::OnCreateClient	//由CFrameWnd::OnCreate函数调用
+		在函数内部定义CSplitterWnd类对象
+		利用对象调用CSplitterWnd::CreateStatic创建框架窗口
+		调用CSplitterWnd::CreateView给各个部分添加视图窗口
+*****************************************************************
+运行时类信息伪代码
+yellowDog.IsKindOf(RUNTIME_CLASS(CDog){//函数内部this指针为&yellowDog,参数&CObject::classCObject
+	CRuntimeClass* pClassThis = GetRuntimeClass();//获取链表头结点
+	return pClassThis->IsDerivedFrom(pClass);{   //pClass  尾节点
+		//函数内部this指针为pClassThis链表头结点  ==&CDog::classCDog
+		const CRuntimeClass* pClassThis = this;  //this==&CDog::classCDog
+		while(pClassThis!-NULL){
+			if(pClass==&CObject::classCDog){
+				return TRUE;
+			}
+			pClassThis=pClassThis->m_pBaseClass;
+		}
+		return FALSE;
+	}
+}
+
+
+
+***************************************************************
+动态创建机制
+	RUNTIME_CLASS(CDog)->CreateObject(){//this==&CDog::classCDog
+		pObject=(*pfnCreateObject)();{
+			return new CDog;//new 一个对象,并将地址返回.
+		}
+	}
+
+
+
+struct CRuntimeClass
+{
+// Attributes
+	LPCSTR m_lpszClassName;
+	int m_nObjectSize;
+	UINT m_wSchema; // schema number of the loaded class
+	CObject* (PASCAL* m_pfnCreateObject)(); // NULL => abstract class
+	CRuntimeClass* m_pBaseClass;
+
+// Operations
+	CObject* CreateObject();
+	BOOL IsDerivedFrom(const CRuntimeClass* pBaseClass) const;
+
+// Implementation
+	void Store(CArchive& ar) const;
+	static CRuntimeClass* PASCAL Load(CArchive& ar, UINT* pwSchemaNum);
+
+	// CRuntimeClass objects linked together in simple list
+	CRuntimeClass* m_pNextClass;       // linked list of registered classes
+};
+
+
+
+
+*************************************************
+BOOL CRuntimeClass::IsDerivedFrom(const CRuntimeClass* pBaseClass) const
+{
+	ASSERT(this != NULL);
+	ASSERT(AfxIsValidAddress(this, sizeof(CRuntimeClass), FALSE));
+	ASSERT(pBaseClass != NULL);
+	ASSERT(AfxIsValidAddress(pBaseClass, sizeof(CRuntimeClass), FALSE));
+
+	// simple SI case
+	const CRuntimeClass* pClassThis = this;
+	while (pClassThis != NULL)
+	{
+		if (pClassThis == pBaseClass)
+			return TRUE;
+#ifdef _AFXDLL
+		pClassThis = (*pClassThis->m_pfnGetBaseClass)();
+#else
+		pClassThis = pClassThis->m_pBaseClass;
+#endif
+	}
+	return FALSE;       // walked to the top, no match
+}
+
+
+
+BOOL CObject::IsKindOf(const CRuntimeClass* pClass) const
+{
+	ASSERT(this != NULL);
+	// it better be in valid memory, at least for CObject size
+	ASSERT(AfxIsValidAddress(this, sizeof(CObject)));
+
+	// simple SI case
+	CRuntimeClass* pClassThis = GetRuntimeClass();  yellowDog->GetRuntimeClass(); 返回头结点
+	return pClassThis->IsDerivedFrom(pClass);
+}
+
+
+
+之前该过程与WM_CREATE一致
+OnWndMsg(){
+	OnCommand(){
+		UINT nID = LOWORD(wParam);	//获取被点击菜单项的ID
+		...
+		OnCmdMsg(nID...){
+			CView* pView = GetActiveView(){;//this==pFrame 获取具有焦点的视图
+				return m_pViewActive;
+			}
+			pView->OnCmdMsg(nID, nCode, pExtra, pHandlerInfo){;//函数内部指针为pView
+				
+			}
+		}
+	}
+}
+
+
+BOOL CWnd::OnWndMsg(UINT message, WPARAM wParam, LPARAM lParam, LRESULT* pResult)
+{
+	LRESULT lResult = 0;
+
+	// special case for commands
+	if (message == WM_COMMAND)	
+	{					//菜单挂在框架窗口上
+		if (OnCommand(wParam, lParam))	//this==pFrame
+		{
+			lResult = 1;
+			goto LReturnTrue;
+		}
+		return FALSE;
+	}
+	.....
+}
+
+
+void CView::OnPaint()
+{
+	// standard paint routine
+	CPaintDC dc(this);
+	OnPrepareDC(&dc);
+	OnDraw(&dc);		//父类调用
+}
+
+
+CView* CFrameWnd::GetActiveView() const
+{
+	ASSERT(m_pViewActive == NULL ||
+		m_pViewActive->IsKindOf(RUNTIME_CLASS(CView)));
+	return m_pViewActive;
+}
+
+CMyView::OnDraw(CDC * 0x0018fa98 {CPaintDC hWnd=0x00060190}) line 16
+CView::OnPaint() line 185
+CWnd::OnWndMsg(unsigned int 15, unsigned int 0, long 0, long * 0x0018fc08) line 1836
+CWnd::WindowProc(unsigned int 15, unsigned int 0, long 0) line 1596 + 30 bytes
+AfxCallWndProc(CWnd * 0x028d1680 {CMyView hWnd=0x00060190}, HWND__ * 0x00060190, unsigned int 15, unsigned int 0, long 0) line 215 + 26 bytes
+AfxWndProc(HWND__ * 0x00060190, unsigned int 15, unsigned int 0, long 0) line 379
+USER32! 760162fa()
+USER32! 76017316()
+USER32! 76016de8()
+USER32! 76016e44()
+NTDLL! 776f011a()
+CWnd::UpdateWindow() line 118 + 63 bytes
+CMyWinApp::InitInstance() line 62
+AfxWinMain(HINSTANCE__ * 0x00400000, HINSTANCE__ * 0x00000000, char * 0x006f588e, int 1) line 39 + 11 bytes
+WinMain(HINSTANCE__ * 0x00400000, HINSTANCE__ * 0x00000000, char * 0x006f588e, int 1) line 30
+WinMainCRTStartup() line 198 + 54 bytes
+KERNEL32! 767b33ca()
+NTDLL! 77719ed2()
+NTDLL! 77719ea
+
+
+
+CObject* CRuntimeClass::CreateObject()
+{
+	if (m_pfnCreateObject == NULL)   //this->
+	{
+		TRACE(_T("Error: Trying to create object which is not ")
+			  _T("DECLARE_DYNCREATE \nor DECLARE_SERIAL: %hs.\n"),
+			m_lpszClassName);
+		return NULL;
+	}
+
+	CObject* pObject = NULL;
+	TRY
+	{
+		pObject = (*m_pfnCreateObject)();
+	}
+	END_TRY
+
+	return pObject;
+}

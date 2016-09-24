@@ -1,0 +1,90 @@
+MFC基本控件
+	1.静态控件  如图片、静态文本以及分组框等，一般不接收用户输入，知识用来做相关提示。
+	2.编辑框控件CEdit，接受用户输入的文本。
+	3.按钮控件CButton，包括一般按钮。复选按钮和单选按钮。(单选、复选用的是同一个类)
+		使用单选按钮式注意group属性的设置。
+	4.组合框和列表框。组合框，列多项只可选一项或编辑。列表框，列多项可多选不可编辑。
+	组合框数据项可以通过属性设置，列表框只可以通过函数来操作。
+
+	CFileDialog( BOOL bOpenFileDialog, LPCTSTR lpszDefExt = NULL, 
+	LPCTSTR lpszFileName = NULL, DWORD dwFlags = OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT,
+	LPCTSTR lpszFilter = NULL, CWnd* pParentWnd = NULL );
+	bOpenFileDialog TRUE 表示文件打开对话框 否则则为另存为对话框。
+	lpszFilter 表示过滤器。每个项之间用 "|"隔开,末尾用"||"表示结束。
+	数据项由两个部分组成。显示部分和过滤部分，也用"|"隔开。
+	"视频文件(*.avi)|*.avi"  一个数据项
+	"视频文件(*.avi)|*.avi|所有文件(*.*)|*.*||"
+						 |
+						 |___> 结束。
+
+	组合框  
+		CComBoBox
+	列表框
+		CListBox
+	添加数据项
+		AddString
+	查找数据项
+		FindString
+	插入数据项
+		InsertString
+	删除数据项
+		DeleteString
+	设置数据项的附加数据	/获取
+		SetItemData	GetItemData
+	
+	设置/获取当前选择项
+		SetCurSel/GetCurSel
+	获取数据项的数目
+		GetCount
+
+
+
+	通用控件
+		进度条控件
+		滑块
+		旋转按钮
+	控件使用
+		设置控件数值范围
+		SetRange/SetRange32
+		GetRange/GetRange32
+
+		设置控件的步长或增量
+		CProgress::SetStep
+		CSliderCtrl::SetLineSize
+		CSliderCtrl::SetPageSize	page键
+		CSpinButtonCtrl::SetAccel
+
+		typedef struct { 
+		    UINT nSec; 
+		    UINT nInc; 
+		}UDACCEL, FAR *LPUDACCEL;
+
+		Members
+		nSec 
+		Amount of elapsed time, in seconds, before the position change increment specified by nInc is used. 
+		nInc 
+		Position change increment to use after the time specified by nSec elapses. 
+
+	获取/设置当前位置
+		SetPos/GetPos
+
+	列表控件
+		相关类
+		CListCtrl	用在对话框上
+		CListView	视图类，
+		CListView=CView+CListCtrl		
+		CListCtrl& GetListCtrl( ) const;	在视图中获取相关联的控件。
+
+		使用
+		1.设置控件的图标列表  大图标和小图标
+		2.SetImageList	设置图标列表
+		3.InsertColumn	设置控件的列
+		4.CListCtrl::Insert
+	
+
+		
+	树控件
+		相关类
+		CTreeCtrl	操作与列表一样。
+		
+	

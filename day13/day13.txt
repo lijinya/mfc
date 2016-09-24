@@ -1,0 +1,54 @@
+MFC线程
+	
+	线程分类
+		工作者线程 后台比较耗时的操作(不需要与用户交互的工作:后台)
+		用户界面线程:创建带界面的线程,在线程中可以与用户进行交互。
+
+	CWinThread* AfxBeginThread( AFX_THREADPROC pfnThreadProc, 
+	LPVOID pParam, int nPriority = THREAD_PRIORITY_NORMAL,
+	UINT nStackSize = 0, DWORD dwCreateFlags = 0, 
+	LPSECURITY_ATTRIBUTES lpSecurityAttrs = NULL );
+
+	CWinThread* AfxBeginThread( CRuntimeClass* pThreadClass, 
+	int nPriority = THREAD_PRIORITY_NORMAL, UINT nStackSize = 0, 
+	DWORD dwCreateFlags = 0, LPSECURITY_ATTRIBUTES lpSecurityAttrs = NULL );
+
+
+	CWinThread* AfxBeginThread( 
+	AFX_THREADPROC pfnThreadProc, 
+	LPVOID pParam, 
+	int nPriority = THREAD_PRIORITY_NORMAL, 
+	UINT nStackSize = 0, 
+	DWORD dwCreateFlags = 0, 
+	LPSECURITY_ATTRIBUTES lpSecurityAttrs = NULL );
+	CWinThread* AfxBeginThread( 
+	CRuntimeClass* pThreadClass, 
+	int nPriority = THREAD_PRIORITY_NORMAL, 
+	UINT nStackSize = 0, 
+	DWORD dwCreateFlags = 0, 
+	LPSECURITY_ATTRIBUTES lpSecurityAttrs = NULL );
+
+
+	工作者线程使用
+
+	//线程函数要么是全局函数，要么是类的静态函数。
+	AfxBeginThread(MyControllingFunction,this);//对话框。
+	//启动线程。调用完自动关闭。
+
+	//全局的线程函数。
+	UINT MyControllingFunction( LPVOID pParam){
+		CMFCThreadDlg *pThis=(CMFCThreadDlg *)pParam;
+		for(int i=0;i<10;++i){
+			pThis->m_wndList.AddString("Hello World!");
+			Sleep(200);
+		}
+		
+		return 0;
+	}
+
+	
+	用户线程函数。
+		添加CWndThread类的子类。类似于CWndApp类。
+		添加用户界面的子类,并且在CMyThread类的InitInstance
+		创建并显示窗口。
+		调用AfxBeginThread函数,在函数的参数中指定

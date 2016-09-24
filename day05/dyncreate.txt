@@ -1,0 +1,94 @@
+#define DECLARE_DYNCREATE(class_name) \
+	DECLARE_DYNAMIC(class_name) \
+	static CObject* PASCAL CreateObject();
+
+protected: \
+	static CRuntimeClass* PASCAL _GetBaseClass(); \
+public: \
+	static AFX_DATA CRuntimeClass class##class_name; \
+	virtual CRuntimeClass* GetRuntimeClass() const; \
+
+
+#ifdef _AFXDLL
+#define DECLARE_DYNAMIC(class_name) \
+protected: \
+	static CRuntimeClass* PASCAL _GetBaseClass(); \
+public: \
+	static const AFX_DATA CRuntimeClass class##class_name; \
+	virtual CRuntimeClass* GetRuntimeClass() const; \
+
+#define _DECLARE_DYNAMIC(class_name) \
+protected: \
+	static CRuntimeClass* PASCAL _GetBaseClass(); \
+public: \
+	static AFX_DATA CRuntimeClass class##class_name; \
+	virtual CRuntimeClass* GetRuntimeClass() const; \
+
+#else
+
+#define IMPLEMENT_DYNCREATE(class_name, base_class_name) \
+	CObject* PASCAL class_name::CreateObject() \
+		{ return new class_name; } \
+	IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, 0xFFFF, \
+		class_name::CreateObject)
+
+#ifdef _AFXDLL
+#define IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, wSchema, pfnNew) \
+	CRuntimeClass* PASCAL class_name::_GetBaseClass() \
+		{ return RUNTIME_CLASS(base_class_name); } \
+	AFX_COMDAT const AFX_DATADEF CRuntimeClass class_name::class##class_name = { \
+		#class_name, sizeof(class class_name), wSchema, pfnNew, \
+			&class_name::_GetBaseClass, NULL }; \
+	CRuntimeClass* class_name::GetRuntimeClass() const \
+		{ return RUNTIME_CLASS(class_name); } \
+
+#define _IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, wSchema, pfnNew) \
+	CRuntimeClass* PASCAL class_name::_GetBaseClass() \
+		{ return RUNTIME_CLASS(base_class_name); } \
+	AFX_COMDAT AFX_DATADEF CRuntimeClass class_name::class##class_name = { \
+		#class_name, sizeof(class class_name), wSchema, pfnNew, \
+			&class_name::_GetBaseClass, NULL }; \
+	CRuntimeClass* class_name::GetRuntimeClass() const \
+		{ return RUNTIME_CLASS(class_name); } \
+
+#else
+#define IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, wSchema, pfnNew) \
+	AFX_COMDAT const AFX_DATADEF CRuntimeClass class_name::class##class_name = { \
+		#class_name, sizeof(class class_name), wSchema, pfnNew, \
+			RUNTIME_CLASS(base_class_name), NULL }; \
+	CRuntimeClass* class_name::GetRuntimeClass() const \
+		{ return RUNTIME_CLASS(class_name); } \
+
+#define _IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, wSchema, pfnNew) \
+	AFX_DATADEF CRuntimeClass class_name::class##class_name = { \
+		#class_name, sizeof(class class_name), wSchema, pfnNew, \
+			RUNTIME_CLASS(base_class_name), NULL }; \
+	CRuntimeClass* class_name::GetRuntimeClass() const \
+		{ return RUNTIME_CLASS(class_name); } \
+
+#endif
+
+
+
+****************************
+
+
+CObject* CRuntimeClass::CreateObject()
+{
+	if (m_pfnCreateObject == NULL)
+	{
+		TRACE(_T("Error: Trying to create object which is not ")
+			  _T("DECLARE_DYNCREATE \nor DECLARE_SERIAL: %hs.\n"),
+			m_lpszClassName);
+		return NULL;
+	}
+
+	CObject* pObject = NULL;
+	TRY
+	{
+		pObject = (*m_pfnCreateObject)();
+	}
+	END_TRY
+
+	return pObject;
+}

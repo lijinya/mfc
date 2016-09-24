@@ -1,0 +1,854 @@
+消息映射机制
+	1)必须继承自CCmdTarget
+	2)类中药添加声明宏 DECLARE_MESSAGE_MAP()
+	3)类外添加实现宏
+		BEGIN_MESSAGE_MAP(theClass,baseClass)////本类，基类
+			ON_MESSAGE(msg,functionname)
+		END_MESSAGE_MAP()
+		
+3宏展开各部分的作用
+	_messageEntries[]--静态数组
+	保存了消息ID和处理这个消息的函数的对应关系
+	messageMap-静态变量
+		1- 保存父类的静态变量地址
+		2- 保存本类的静态数组首地址
+	
+	GetMessageMap---虚函数
+		获取本类静态变量地址(链表的头结点)
+	
+4关系
+	GetMessageMap()
+		|->CMyFrameWnd::_messageEntries[]
+			|->消息ID.....处理函数地址
+		......................................	//不论写不写消息宏,父类..的消息链表都存在
+		|->CFrameWnd::messageMap		//加宏实为加节点
+			|->CFrameWnd::_messageEntries[]
+				|->消息ID...处理函数地址
+				....................................
+				|->CWnd::messageMap
+					|->CWnd::_messageEntries[]
+						|->消息ID....处理函数地址
+					|->CCmdTarget::messageMap
+						|->CCmdTarget::_messageEntries[]
+							|->消息ID...处理函数地址
+						|->NULL
+5消息处理过程
+	1)利用GetMessageMap函数获取本类静态变量地址(链表头结点)pMessageMap
+	2)利用pMessageMap头结点的第二个语速获取对应静态数组，然后在数组中
+	  查找对应消息函数地址的地址,如果找到执行3,未找到则执行4
+	3)使用找到的数组元素的最后一个成员(成员函数的地址),并调用这个函数完成消息处理
+	4)利用pMessageMap的第一个元素获取父类的静态变量地址，并重新给pMessageMap赋值为
+	父类的静态变量地址执行2
+	5)遍历整个链表都未找到则调用DefWindowProc给消息做默认处理.
+
+二MFC消息分类
+	1)标准消息
+		ON_WM_XXX
+	2)命令消息(WM_COMMAND)	//菜单  加速键  通知消息
+		ON_COMMAND(命令ID,处理函数)
+		ON_COMMAND_RANGE(起始ID,终止ID,处理函数)	//往数组中扔通知消息
+		//从起始ID到终止ID都由这个函数处理	
+	3)自定义消息
+		#define WM_MYMESSAGE WM_USER+n  WM_USER==0x400 n<=  	
+		没有专门处理自定义消息的宏	由通用消息宏处理
+		ON_MESSAGE(消息ID,处理函数)
+	4)通知消息
+		ON_EN_CHANGE		//EN---EDIT_NOTIFY
+
+WM_COMMAND WM_NOTIFY 消息另行处理
+**********************************************************************
+封装好的消息映射宏    标准消息
+
+ON_WM_CREATE()
+#define ON_WM_CREATE() \
+	{ WM_CREATE, 0, 0, 0, AfxSig_is, \		//AfxSig_is--->int 
+		(AFX_PMSG)(AFX_PMSGW)(int (AFX_MSG_CALL CWnd::*)(LPCREATESTRUCT))&OnCreate },
+ON_WM_CREATE( ) afx_msg int OnCreate( LPCREATESTRUCT ); 	//afx_msg 占位符 提高可读性
+
+控件通知消息
+
+#define ON_COMMAND(id, memberFxn) \
+	{ WM_COMMAND, CN_COMMAND, (WORD)id, (WORD)id, AfxSig_vv, (AFX_PMSG)&memberFxn },
+CN_COMMAND通知码  都是0
+
+afx_msg void memberFxn( );	//MSDN声明
+
+#define CN_COMMAND              0               // void ()
+#define CN_UPDATE_COMMAND_UI    ((UINT)(-1))    // void (CCmdUI*)
+#define CN_EVENT                ((UINT)(-2))    // OLE event
+#define CN_OLECOMMAND           ((UINT)(-3))    // OLE document command
+#define CN_OLE_UNREGISTER       ((UINT)(-4))    // OLE unregister
+
+
+#define ON_COMMAND_RANGE(id, idLast, memberFxn) \			//不建议使用,if else switch case
+	{ WM_COMMAND, CN_COMMAND, (WORD)id, (WORD)idLast, AfxSig_vw, \	//容易扰乱程序结构,降低可读性
+		(AFX_PMSG)(void (AFX_MSG_CALL CCmdTarget::*)(UINT))&memberFxn },
+
+MSDN中的例子
+// The code fragment below shows how to use ON_COMMAND_RANGE macro
+// to map a contiguous range of command IDs to a single message 
+// handler function (i.e. OnFileMenuItems() is the sample below). In 
+// addition, it also shows how to use CheckMenuRadioItem() to check a 
+// selected menu item and makes it a radio item.
+BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
+   //{{AFX_MSG_MAP(CMainFrame)
+   // ... 
+   //}}AFX_MSG_MAP
+   ON_COMMAND_RANGE(ID_FILE_MENUITEM1, ID_FILE_MENUITEM3, OnFileMenuItems)
+END_MESSAGE_MAP()
+
+void CMainFrame::OnFileMenuItems(UINT nID)
+{
+   CMenu* mmenu = GetMenu();
+   CMenu* submenu = mmenu->GetSubMenu(0);
+   submenu->CheckMenuRadioItem(ID_FILE_MENUITEM1, ID_FILE_MENUITEM3, 
+      nID, MF_BYCOMMAND);
+}
+
+
+
+#define ON_MESSAGE(message, memberFxn) \
+	{ message, 0, 0, 0, AfxSig_lwl, \
+		(AFX_PMSG)(AFX_PMSGW)(LRESULT (AFX_MSG_CALL CWnd::*)(WPARAM, LPARAM))&memberFxn },
+
+// Edit Control Notification Codes
+#define ON_EN_SETFOCUS(id, memberFxn) \
+	ON_CONTROL(EN_SETFOCUS, id, memberFxn)
+#define ON_EN_KILLFOCUS(id, memberFxn) \
+	ON_CONTROL(EN_KILLFOCUS, id, memberFxn)
+#define ON_EN_CHANGE(id, memberFxn) \
+	ON_CONTROL(EN_CHANGE, id, memberFxn)
+#define ON_EN_UPDATE(id, memberFxn) \
+	ON_CONTROL(EN_UPDATE, id, memberFxn)
+#define ON_EN_ERRSPACE(id, memberFxn) \
+	ON_CONTROL(EN_ERRSPACE, id, memberFxn)
+#define ON_EN_MAXTEXT(id, memberFxn) \
+	ON_CONTROL(EN_MAXTEXT, id, memberFxn)
+#define ON_EN_HSCROLL(id, memberFxn) \
+	ON_CONTROL(EN_HSCROLL, id, memberFxn)
+#define ON_EN_VSCROLL(id, memberFxn) \
+	ON_CONTROL(EN_VSCROLL, id, memberFxn)
+
+#define ON_CONTROL(wNotifyCode, id, memberFxn) \
+	{ WM_COMMAND, (WORD)wNotifyCode, (WORD)id, (WORD)id, AfxSig_vv, \
+		(AFX_PMSG)&memberFxn },
+**********************************************************************
+进程间通信
+HWND FindWindow(
+  LPCTSTR lpClassName,  // class name
+  LPCTSTR lpWindowName  // window name
+);
+//注意窗口标题栏不可同名
+创建一个按钮，按钮被点击时，向另一个进程窗口发送自定义消息
+接收发送的消息，并处理。。弹出提示框。
+**********************************************************************
+struct AFX_MSGMAP_ENTRY{
+	UINT nMessage;//消息ID
+	UINT nCode;	//通知码
+	UINT nID;	//命令ID/控件ID
+	UINT nLastID;	//最后一个控件ID
+	UINT nSig;	//消息处理函数的类型
+	AFX_PMSG pfn;	//消息处理函数的地址(指针)
+};
+struct AFX_MSGMAP
+{
+	const AFX_MSGMAP* pBaseMap;
+
+	const AFX_MSGMAP_ENTRY* lpEntries;
+};
+
+**********************************************************************
+伪代码
+以WM_CREATE消息为例
+AfxWndProc(....){
+	CWnd* pWnd = CWnd::FromHandlePermanent(hWnd);	
+	//获取和窗口句柄绑定在一起的框架类对象地址(pFrame)
+	ASSERT(pWnd != NULL);
+	ASSERT(pWnd->m_hWnd == hWnd);
+	if (pWnd == NULL || pWnd->m_hWnd != hWnd)
+		return ::DefWindowProc(hWnd, nMsg, wParam, lParam);
+&&&	return AfxCallWndProc(pWnd, hWnd, nMsg, wParam, lParam);	
+}
+return AfxCallWndProc(pWnd, hWnd, nMsg, wParam, lParam);	//pWnd==pFrame
+	lResult = pWnd->WindowProc(nMsg, wParam, lParam);	//pWnd==pFrame
+		LRESULT CWnd::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
+		{
+			OnWndMsg(message, wParam, lParam, &lResult){
+				const AFX_MSGMAP* pMessageMap; pMessageMap = GetMessageMap();{
+					//进入宏展开  返回链表头结点地址(本类静态变量)
+					return &CMyFrameWnd::messageMap;
+				}
+				const AFX_MSGMAP_ENTRY* lpEntry;
+					for (; pMessageMap != NULL;
+					pMessageMap = pMessageMap->pBaseMap)//遍历链表
+						(lpEntry = AfxFindMessageEntry(pMessageMap->lpEntries,
+					message, 0, 0)) != NULL)
+					///用WM_CREATE匹配消息链表,找到处理函数(查找本类静态数组)
+					///如果没找到则去父类找，找到返回匹配到的数组元素的地址
+					///没找到则默认处理
+					if(lpEntry!=NULL){
+						goto LDispatch;		//跳出for循环
+						一旦找到跳出for循环,不在变量链表
+					}
+					LDispatch:
+						union MessageMapFunctions mmf;	//lpEntry为消息数组中WM_CREATE的地址
+						mmf.pfn = lpEntry->pfn;		//pfn=CMyFrameWnd::OnCreate
+						//pfn结构体最后一个成员
+						int nSig;			//
+						nSig = lpEntry->nSig;		//
+						switch(nSig){		//联合体有多少成员就有多少种情况
+							......
+							case AfxSig_lwl:
+								lResult = (this->*mmf.pfn_lwl)(wParam, lParam);
+								break;
+								......
+	此时mmf.pfn_lwl=&OnCreate 因为其类型为联合体,先前赋值为&OnCreate而后未覆盖.所有成员公用此值
+						}
+			}
+				
+			
+		}
+**********************************************************************
+LRESULT CWnd::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
+		{
+			// OnWndMsg does most of the work, except for DefWindowProc call
+			LRESULT lResult = 0;
+			//this=pFrame
+			if (!OnWndMsg(message, wParam, lParam, &lResult))	----------->
+				lResult = DefWindowProc(message, wParam, lParam);
+			return lResult;
+		}
+**********************************************************************
+CWnd* PASCAL CWnd::FromHandlePermanent(HWND hWnd)
+{
+	CHandleMap* pMap = afxMapHWND();
+	CWnd* pWnd = NULL;
+	if (pMap != NULL)
+	{
+		// only look in the permanent map - does no allocations
+		pWnd = (CWnd*)pMap->LookupPermanent(hWnd);
+		ASSERT(pWnd == NULL || pWnd->m_hWnd == hWnd);
+	}
+	return pWnd;
+}
+**********************************************************************
+CHandleMap* PASCAL afxMapHWND(BOOL bCreate)
+{
+	AFX_MODULE_THREAD_STATE* pState = AfxGetModuleThreadState();
+	if (pState->m_pmapHWND == NULL && bCreate)
+	{
+		BOOL bEnable = AfxEnableMemoryTracking(FALSE);
+#ifndef _AFX_PORTABLE
+		_PNH pnhOldHandler = AfxSetNewHandler(&AfxCriticalNewHandler);
+#endif
+		pState->m_pmapHWND = new CHandleMap(RUNTIME_CLASS(CTempWnd),
+			offsetof(CWnd, m_hWnd));
+
+#ifndef _AFX_PORTABLE
+		AfxSetNewHandler(pnhOldHandler);
+#endif
+		AfxEnableMemoryTracking(bEnable);
+	}
+	return pState->m_pmapHWND;
+}
+**********************************************************************
+inline CObject* CHandleMap::LookupPermanent(HANDLE h)
+	{ return (CObject*)m_permanentMap.GetValueAt((LPVOID)h); }
+**********************************************************************
+
+**********************************************************************
+union MessageMapFunctions
+{
+	AFX_PMSG pfn;   // generic member function pointer
+
+	// specific type safe variants for WM_COMMAND and WM_NOTIFY messages
+	void (AFX_MSG_CALL CCmdTarget::*pfn_COMMAND)();
+	BOOL (AFX_MSG_CALL CCmdTarget::*pfn_bCOMMAND)();
+	void (AFX_MSG_CALL CCmdTarget::*pfn_COMMAND_RANGE)(UINT);
+	BOOL (AFX_MSG_CALL CCmdTarget::*pfn_COMMAND_EX)(UINT);
+
+	void (AFX_MSG_CALL CCmdTarget::*pfn_UPDATE_COMMAND_UI)(CCmdUI*);
+	void (AFX_MSG_CALL CCmdTarget::*pfn_UPDATE_COMMAND_UI_RANGE)(CCmdUI*, UINT);
+	void (AFX_MSG_CALL CCmdTarget::*pfn_OTHER)(void*);
+	BOOL (AFX_MSG_CALL CCmdTarget::*pfn_OTHER_EX)(void*);
+
+	void (AFX_MSG_CALL CCmdTarget::*pfn_NOTIFY)(NMHDR*, LRESULT*);
+	BOOL (AFX_MSG_CALL CCmdTarget::*pfn_bNOTIFY)(NMHDR*, LRESULT*);
+	void (AFX_MSG_CALL CCmdTarget::*pfn_NOTIFY_RANGE)(UINT, NMHDR*, LRESULT*);
+	BOOL (AFX_MSG_CALL CCmdTarget::*pfn_NOTIFY_EX)(UINT, NMHDR*, LRESULT*);
+
+	// type safe variant for thread messages
+
+	void (AFX_MSG_CALL CWinThread::*pfn_THREAD)(WPARAM, LPARAM);
+
+	// specific type safe variants for WM-style messages
+	BOOL    (AFX_MSG_CALL CWnd::*pfn_bD)(CDC*);
+	BOOL    (AFX_MSG_CALL CWnd::*pfn_bb)(BOOL);
+	BOOL    (AFX_MSG_CALL CWnd::*pfn_bWww)(CWnd*, UINT, UINT);
+	BOOL    (AFX_MSG_CALL CWnd::*pfn_bHELPINFO)(HELPINFO*);
+	BOOL    (AFX_MSG_CALL CWnd::*pfn_bWCDS)(CWnd*, COPYDATASTRUCT*);
+	HBRUSH  (AFX_MSG_CALL CWnd::*pfn_hDWw)(CDC*, CWnd*, UINT);
+	HBRUSH  (AFX_MSG_CALL CWnd::*pfn_hDw)(CDC*, UINT);
+	int     (AFX_MSG_CALL CWnd::*pfn_iwWw)(UINT, CWnd*, UINT);
+	int     (AFX_MSG_CALL CWnd::*pfn_iww)(UINT, UINT);
+	int     (AFX_MSG_CALL CWnd::*pfn_iWww)(CWnd*, UINT, UINT);
+	int     (AFX_MSG_CALL CWnd::*pfn_is)(LPTSTR);
+	LRESULT (AFX_MSG_CALL CWnd::*pfn_lwl)(WPARAM, LPARAM);
+	LRESULT (AFX_MSG_CALL CWnd::*pfn_lwwM)(UINT, UINT, CMenu*);
+	void    (AFX_MSG_CALL CWnd::*pfn_vv)(void);
+
+	void    (AFX_MSG_CALL CWnd::*pfn_vw)(UINT);
+	void    (AFX_MSG_CALL CWnd::*pfn_vww)(UINT, UINT);
+	void    (AFX_MSG_CALL CWnd::*pfn_vvii)(int, int);
+	void    (AFX_MSG_CALL CWnd::*pfn_vwww)(UINT, UINT, UINT);
+	void    (AFX_MSG_CALL CWnd::*pfn_vwii)(UINT, int, int);
+	void    (AFX_MSG_CALL CWnd::*pfn_vwl)(WPARAM, LPARAM);
+	void    (AFX_MSG_CALL CWnd::*pfn_vbWW)(BOOL, CWnd*, CWnd*);
+	void    (AFX_MSG_CALL CWnd::*pfn_vD)(CDC*);
+	void    (AFX_MSG_CALL CWnd::*pfn_vM)(CMenu*);
+	void    (AFX_MSG_CALL CWnd::*pfn_vMwb)(CMenu*, UINT, BOOL);
+
+	void    (AFX_MSG_CALL CWnd::*pfn_vW)(CWnd*);
+	void    (AFX_MSG_CALL CWnd::*pfn_vWww)(CWnd*, UINT, UINT);
+	void    (AFX_MSG_CALL CWnd::*pfn_vWp)(CWnd*, CPoint);
+	void    (AFX_MSG_CALL CWnd::*pfn_vWh)(CWnd*, HANDLE);
+	void    (AFX_MSG_CALL CWnd::*pfn_vwW)(UINT, CWnd*);
+	void    (AFX_MSG_CALL CWnd::*pfn_vwWb)(UINT, CWnd*, BOOL);
+	void    (AFX_MSG_CALL CWnd::*pfn_vwwW)(UINT, UINT, CWnd*);
+	void    (AFX_MSG_CALL CWnd::*pfn_vwwx)(UINT, UINT);
+	void    (AFX_MSG_CALL CWnd::*pfn_vs)(LPTSTR);
+	void    (AFX_MSG_CALL CWnd::*pfn_vOWNER)(int, LPTSTR);   // force return TRUE
+	int     (AFX_MSG_CALL CWnd::*pfn_iis)(int, LPTSTR);
+	UINT    (AFX_MSG_CALL CWnd::*pfn_wp)(CPoint);
+	UINT    (AFX_MSG_CALL CWnd::*pfn_wv)(void);
+	void    (AFX_MSG_CALL CWnd::*pfn_vPOS)(WINDOWPOS*);
+	void    (AFX_MSG_CALL CWnd::*pfn_vCALC)(BOOL, NCCALCSIZE_PARAMS*);
+	void    (AFX_MSG_CALL CWnd::*pfn_vwp)(UINT, CPoint);
+	void    (AFX_MSG_CALL CWnd::*pfn_vwwh)(UINT, UINT, HANDLE);
+	BOOL    (AFX_MSG_CALL CWnd::*pfn_bwsp)(UINT, short, CPoint);
+	void    (AFX_MSG_CALL CWnd::*pfn_vws)(UINT, LPCTSTR);
+};
+
+**********************************************************************
+BOOL CWnd::OnWndMsg(UINT message, WPARAM wParam, LPARAM lParam, LRESULT* pResult)
+{
+	LRESULT lResult = 0;
+
+	// special case for commands
+	if (message == WM_COMMAND)
+	{
+		if (OnCommand(wParam, lParam))
+		{
+			lResult = 1;
+			goto LReturnTrue;
+		}
+		return FALSE;
+	}
+
+	// special case for notifies
+	if (message == WM_NOTIFY)
+	{
+		NMHDR* pNMHDR = (NMHDR*)lParam;
+		if (pNMHDR->hwndFrom != NULL && OnNotify(wParam, lParam, &lResult))
+			goto LReturnTrue;
+		return FALSE;
+	}
+
+	// special case for activation
+	if (message == WM_ACTIVATE)
+		_AfxHandleActivate(this, wParam, CWnd::FromHandle((HWND)lParam));
+
+	// special case for set cursor HTERROR
+	if (message == WM_SETCURSOR &&
+		_AfxHandleSetCursor(this, (short)LOWORD(lParam), HIWORD(lParam)))
+	{
+		lResult = 1;
+		goto LReturnTrue;
+	}
+
+	const AFX_MSGMAP* pMessageMap; pMessageMap = GetMessageMap();
+	this->GetMessageMap===pFrame->GetMessageMap	回到宏展开取链表的头结点
+	UINT iHash; iHash = (LOWORD((DWORD)pMessageMap) ^ message) & (iHashMax-1);
+	AfxLockGlobals(CRIT_WINMSGCACHE);
+	AFX_MSG_CACHE* pMsgCache; pMsgCache = &_afxMsgCache[iHash];
+	const AFX_MSGMAP_ENTRY* lpEntry;
+	if (message == pMsgCache->nMsg && pMessageMap == pMsgCache->pMessageMap)
+	{
+		// cache hit
+		lpEntry = pMsgCache->lpEntry;
+		AfxUnlockGlobals(CRIT_WINMSGCACHE);
+		if (lpEntry == NULL)
+			return FALSE;
+
+		// cache hit, and it needs to be handled
+		if (message < 0xC000)
+			goto LDispatch;
+		else
+			goto LDispatchRegistered;
+	}
+	else
+	{
+		// not in cache, look for it
+		pMsgCache->nMsg = message;
+		pMsgCache->pMessageMap = pMessageMap;
+
+#ifdef _AFXDLL
+		for (/* pMessageMap already init'ed */; pMessageMap != NULL;
+			pMessageMap = (*pMessageMap->pfnGetBaseMap)())
+#else
+		for (/* pMessageMap already init'ed */; pMessageMap != NULL;
+			pMessageMap = pMessageMap->pBaseMap)
+#endif
+		{
+			// Note: catch not so common but fatal mistake!!
+			//      BEGIN_MESSAGE_MAP(CMyWnd, CMyWnd)
+#ifdef _AFXDLL
+			ASSERT(pMessageMap != (*pMessageMap->pfnGetBaseMap)());
+#else
+			ASSERT(pMessageMap != pMessageMap->pBaseMap);
+#endif
+
+			if (message < 0xC000)
+			{
+				// constant window message
+				if ((lpEntry = AfxFindMessageEntry(pMessageMap->lpEntries,
+					message, 0, 0)) != NULL)
+				{
+					pMsgCache->lpEntry = lpEntry;
+					AfxUnlockGlobals(CRIT_WINMSGCACHE);
+					goto LDispatch;		//跳出for循环
+				}
+			}
+			else
+			{
+				// registered windows message
+				lpEntry = pMessageMap->lpEntries;
+				while ((lpEntry = AfxFindMessageEntry(lpEntry, 0xC000, 0, 0)) != NULL)
+				{
+					UINT* pnID = (UINT*)(lpEntry->nSig);
+					ASSERT(*pnID >= 0xC000 || *pnID == 0);
+						// must be successfully registered
+					if (*pnID == message)
+					{
+						pMsgCache->lpEntry = lpEntry;
+						AfxUnlockGlobals(CRIT_WINMSGCACHE);
+						goto LDispatchRegistered;
+					}
+					lpEntry++;      // keep looking past this one
+				}
+			}
+		}
+
+		pMsgCache->lpEntry = NULL;
+		AfxUnlockGlobals(CRIT_WINMSGCACHE);
+		return FALSE;
+	}
+	ASSERT(FALSE);      // not reached
+
+LDispatch:
+	ASSERT(message < 0xC000);
+	union MessageMapFunctions mmf;
+	mmf.pfn = lpEntry->pfn;
+
+	// if we've got WM_SETTINGCHANGE / WM_WININICHANGE, we need to
+	// decide if we're going to call OnWinIniChange() or OnSettingChange()
+
+	int nSig;
+	nSig = lpEntry->nSig;
+	if (lpEntry->nID == WM_SETTINGCHANGE)
+	{
+		DWORD dwVersion = GetVersion();
+		if (LOBYTE(LOWORD(dwVersion)) >= 4)
+			nSig = AfxSig_vws;
+		else
+			nSig = AfxSig_vs;
+	}
+
+	switch (nSig)
+	{
+	default:
+		ASSERT(FALSE);
+		break;
+
+	case AfxSig_bD:
+		lResult = (this->*mmf.pfn_bD)(CDC::FromHandle((HDC)wParam));
+		break;
+
+	case AfxSig_bb:     // AfxSig_bb, AfxSig_bw, AfxSig_bh
+		lResult = (this->*mmf.pfn_bb)((BOOL)wParam);
+		break;
+
+	case AfxSig_bWww:   // really AfxSig_bWiw
+		lResult = (this->*mmf.pfn_bWww)(CWnd::FromHandle((HWND)wParam),
+			(short)LOWORD(lParam), HIWORD(lParam));
+		break;
+
+	case AfxSig_bWCDS:
+		lResult = (this->*mmf.pfn_bWCDS)(CWnd::FromHandle((HWND)wParam),
+			(COPYDATASTRUCT*)lParam);
+		break;
+
+	case AfxSig_bHELPINFO:
+		lResult = (this->*mmf.pfn_bHELPINFO)((HELPINFO*)lParam);
+		break;
+
+	case AfxSig_hDWw:
+		{
+			// special case for OnCtlColor to avoid too many temporary objects
+			ASSERT(message == WM_CTLCOLOR);
+			AFX_CTLCOLOR* pCtl = (AFX_CTLCOLOR*)lParam;
+			CDC dcTemp; dcTemp.m_hDC = pCtl->hDC;
+			CWnd wndTemp; wndTemp.m_hWnd = pCtl->hWnd;
+			UINT nCtlType = pCtl->nCtlType;
+			// if not coming from a permanent window, use stack temporary
+			CWnd* pWnd = CWnd::FromHandlePermanent(wndTemp.m_hWnd);
+			if (pWnd == NULL)
+			{
+#ifndef _AFX_NO_OCC_SUPPORT
+				// determine the site of the OLE control if it is one
+				COleControlSite* pSite;
+				if (m_pCtrlCont != NULL && (pSite = (COleControlSite*)
+					m_pCtrlCont->m_siteMap.GetValueAt(wndTemp.m_hWnd)) != NULL)
+				{
+					wndTemp.m_pCtrlSite = pSite;
+				}
+#endif
+				pWnd = &wndTemp;
+			}
+			HBRUSH hbr = (this->*mmf.pfn_hDWw)(&dcTemp, pWnd, nCtlType);
+			// fast detach of temporary objects
+			dcTemp.m_hDC = NULL;
+			wndTemp.m_hWnd = NULL;
+			lResult = (LRESULT)hbr;
+		}
+		break;
+
+	case AfxSig_hDw:
+		{
+			// special case for CtlColor to avoid too many temporary objects
+			ASSERT(message == WM_REFLECT_BASE+WM_CTLCOLOR);
+			AFX_CTLCOLOR* pCtl = (AFX_CTLCOLOR*)lParam;
+			CDC dcTemp; dcTemp.m_hDC = pCtl->hDC;
+			UINT nCtlType = pCtl->nCtlType;
+			HBRUSH hbr = (this->*mmf.pfn_hDw)(&dcTemp, nCtlType);
+			// fast detach of temporary objects
+			dcTemp.m_hDC = NULL;
+			lResult = (LRESULT)hbr;
+		}
+		break;
+
+	case AfxSig_iwWw:
+		lResult = (this->*mmf.pfn_iwWw)(LOWORD(wParam),
+			CWnd::FromHandle((HWND)lParam), HIWORD(wParam));
+		break;
+
+	case AfxSig_iww:
+		lResult = (this->*mmf.pfn_iww)(LOWORD(wParam), HIWORD(wParam));
+		break;
+
+	case AfxSig_iWww:   // really AfxSig_iWiw
+		lResult = (this->*mmf.pfn_iWww)(CWnd::FromHandle((HWND)wParam),
+			(short)LOWORD(lParam), HIWORD(lParam));
+		break;
+
+	case AfxSig_is:
+		lResult = (this->*mmf.pfn_is)((LPTSTR)lParam);
+		break;
+
+	case AfxSig_lwl:
+		lResult = (this->*mmf.pfn_lwl)(wParam, lParam);
+		break;
+
+	case AfxSig_lwwM:
+		lResult = (this->*mmf.pfn_lwwM)((UINT)LOWORD(wParam),
+			(UINT)HIWORD(wParam), (CMenu*)CMenu::FromHandle((HMENU)lParam));
+		break;
+
+	case AfxSig_vv:
+		(this->*mmf.pfn_vv)();
+		break;
+
+	case AfxSig_vw: // AfxSig_vb, AfxSig_vh
+		(this->*mmf.pfn_vw)(wParam);
+		break;
+
+	case AfxSig_vww:
+		(this->*mmf.pfn_vww)((UINT)wParam, (UINT)lParam);
+		break;
+
+	case AfxSig_vvii:
+		(this->*mmf.pfn_vvii)((short)LOWORD(lParam), (short)HIWORD(lParam));
+		break;
+
+	case AfxSig_vwww:
+		(this->*mmf.pfn_vwww)(wParam, LOWORD(lParam), HIWORD(lParam));
+		break;
+
+	case AfxSig_vwii:
+		(this->*mmf.pfn_vwii)(wParam, LOWORD(lParam), HIWORD(lParam));
+		break;
+
+	case AfxSig_vwl:
+		(this->*mmf.pfn_vwl)(wParam, lParam);
+		break;
+
+	case AfxSig_vbWW:
+		(this->*mmf.pfn_vbWW)(m_hWnd == (HWND)lParam,
+			CWnd::FromHandle((HWND)lParam),
+			CWnd::FromHandle((HWND)wParam));
+		break;
+
+	case AfxSig_vD:
+		(this->*mmf.pfn_vD)(CDC::FromHandle((HDC)wParam));
+		break;
+
+	case AfxSig_vM:
+		(this->*mmf.pfn_vM)(CMenu::FromHandle((HMENU)wParam));
+		break;
+
+	case AfxSig_vMwb:
+		(this->*mmf.pfn_vMwb)(CMenu::FromHandle((HMENU)wParam),
+			LOWORD(lParam), (BOOL)HIWORD(lParam));
+		break;
+
+	case AfxSig_vW:
+		(this->*mmf.pfn_vW)(CWnd::FromHandle((HWND)wParam));
+		break;
+
+	case AfxSig_vW2:
+		(this->*mmf.pfn_vW)(CWnd::FromHandle((HWND)lParam));
+		break;
+
+	case AfxSig_vWww:
+		(this->*mmf.pfn_vWww)(CWnd::FromHandle((HWND)wParam), LOWORD(lParam),
+			HIWORD(lParam));
+		break;
+
+	case AfxSig_vWp:
+		{
+			CPoint point((DWORD)lParam);
+			(this->*mmf.pfn_vWp)(CWnd::FromHandle((HWND)wParam), point);
+		}
+		break;
+
+	case AfxSig_vWh:
+		(this->*mmf.pfn_vWh)(CWnd::FromHandle((HWND)wParam),
+				(HANDLE)lParam);
+		break;
+
+	case AfxSig_vwW:
+		(this->*mmf.pfn_vwW)(wParam, CWnd::FromHandle((HWND)lParam));
+		break;
+
+	case AfxSig_vwWb:
+		(this->*mmf.pfn_vwWb)((UINT)(LOWORD(wParam)),
+			CWnd::FromHandle((HWND)lParam), (BOOL)HIWORD(wParam));
+		break;
+
+	case AfxSig_vwwW:
+	case AfxSig_vwwx:
+		{
+			// special case for WM_VSCROLL and WM_HSCROLL
+			ASSERT(message == WM_VSCROLL || message == WM_HSCROLL ||
+				message == WM_VSCROLL+WM_REFLECT_BASE || message == WM_HSCROLL+WM_REFLECT_BASE);
+			int nScrollCode = (short)LOWORD(wParam);
+			int nPos = (short)HIWORD(wParam);
+			if (lpEntry->nSig == AfxSig_vwwW)
+				(this->*mmf.pfn_vwwW)(nScrollCode, nPos,
+					CWnd::FromHandle((HWND)lParam));
+			else
+				(this->*mmf.pfn_vwwx)(nScrollCode, nPos);
+		}
+		break;
+
+	case AfxSig_vs:
+		(this->*mmf.pfn_vs)((LPTSTR)lParam);
+		break;
+
+	case AfxSig_vws:
+		(this->*mmf.pfn_vws)((UINT) wParam, (LPCTSTR)lParam);
+		break;
+
+	case AfxSig_vOWNER:
+		(this->*mmf.pfn_vOWNER)((int)wParam, (LPTSTR)lParam);
+		lResult = TRUE;
+		break;
+
+	case AfxSig_iis:
+		lResult = (this->*mmf.pfn_iis)((int)wParam, (LPTSTR)lParam);
+		break;
+
+	case AfxSig_wp:
+		{
+			CPoint point((DWORD)lParam);
+			lResult = (this->*mmf.pfn_wp)(point);
+		}
+		break;
+
+	case AfxSig_wv: // AfxSig_bv, AfxSig_wv
+		lResult = (this->*mmf.pfn_wv)();
+		break;
+
+	case AfxSig_vCALC:
+		(this->*mmf.pfn_vCALC)((BOOL)wParam, (NCCALCSIZE_PARAMS*)lParam);
+		break;
+
+	case AfxSig_vPOS:
+		(this->*mmf.pfn_vPOS)((WINDOWPOS*)lParam);
+		break;
+
+	case AfxSig_vwwh:
+		(this->*mmf.pfn_vwwh)(LOWORD(wParam), HIWORD(wParam), (HANDLE)lParam);
+		break;
+
+	case AfxSig_vwp:
+		{
+			CPoint point((DWORD)lParam);
+			(this->*mmf.pfn_vwp)(wParam, point);
+			break;
+		}
+	case AfxSig_vwSIZING:
+		(this->*mmf.pfn_vwl)(wParam, lParam);
+		lResult = TRUE;
+		break;
+
+	case AfxSig_bwsp:
+		lResult = (this->*mmf.pfn_bwsp)(LOWORD(wParam), (short) HIWORD(wParam),
+			CPoint(LOWORD(lParam), HIWORD(lParam)));
+		if (!lResult)
+			return FALSE;
+	}
+	goto LReturnTrue;
+
+LDispatchRegistered:    // for registered windows messages
+	ASSERT(message >= 0xC000);
+	mmf.pfn = lpEntry->pfn;
+	lResult = (this->*mmf.pfn_lwl)(wParam, lParam);
+
+LReturnTrue:
+	if (pResult != NULL)
+		*pResult = lResult;
+	return TRUE;
+}
+**********************************************************************
+
+struct AFX_MSGMAP
+{
+#ifdef _AFXDLL
+	const AFX_MSGMAP* (PASCAL* pfnGetBaseMap)();
+#else
+	const AFX_MSGMAP* pBaseMap;
+#endif
+	const AFX_MSGMAP_ENTRY* lpEntries;
+};
+
+struct AFX_MSGMAP_ENTRY{
+	UINT nMessage;//消息ID
+	UINT nCode;	//通知码
+	UINT nID;	//命令ID/控件ID
+	UINT nLastID;	//最后一个控件ID
+	UINT nSig;	//消息处理函数的类型
+	AFX_PMSG pfn;	//消息处理函数的地址(指针)
+};
+
+struct AFX_MSGMAP_ENTRY
+{
+	UINT nMessage;   // windows message
+	UINT nCode;      // control code or WM_NOTIFY code
+	UINT nID;        // control ID (or 0 for windows messages)
+	UINT nLastID;    // used for entries specifying a range of control id's
+	UINT nSig;       // signature type (action) or pointer to message #
+	AFX_PMSG pfn;    // routine to call (or special value)
+};
+
+*********************************************************************
+
+#ifdef _AFXDLL			//定义动态库
+#define DECLARE_MESSAGE_MAP() \
+private: \
+	static const AFX_MSGMAP_ENTRY _messageEntries[]; \
+protected: \
+	static AFX_DATA const AFX_MSGMAP messageMap; \
+	static const AFX_MSGMAP* PASCAL _GetBaseMessageMap(); \
+	virtual const AFX_MSGMAP* GetMessageMap() const; \
+
+#else
+#define DECLARE_MESSAGE_MAP() \
+private: \
+	static const AFX_MSGMAP_ENTRY _messageEntries[]; \	//静态映射数组
+protected: \
+	static AFX_DATA const AFX_MSGMAP messageMap; \
+	virtual const AFX_MSGMAP* GetMessageMap() const; \
+
+#endif	
+
+
+#ifdef _AFXDLL
+#define DECLARE_MESSAGE_MAP() \
+private: \
+	static const AFX_MSGMAP_ENTRY _messageEntries[]; \
+protected: \
+	static AFX_DATA const AFX_MSGMAP messageMap; \
+	static const AFX_MSGMAP* PASCAL _GetBaseMessageMap(); \
+	virtual const AFX_MSGMAP* GetMessageMap() const; \
+
+#else
+#define DECLARE_MESSAGE_MAP() \
+private: \
+	static const AFX_MSGMAP_ENTRY _messageEntries[]; \
+protected: \
+	static AFX_DATA const AFX_MSGMAP messageMap; \
+	virtual const AFX_MSGMAP* GetMessageMap() const; \
+
+#endif
+
+#ifdef _AFXDLL
+#define BEGIN_MESSAGE_MAP(theClass, baseClass) \
+	const AFX_MSGMAP* PASCAL theClass::_GetBaseMessageMap() \
+		{ return &baseClass::messageMap; } \
+	const AFX_MSGMAP* theClass::GetMessageMap() const \
+		{ return &theClass::messageMap; } \
+	AFX_COMDAT AFX_DATADEF const AFX_MSGMAP theClass::messageMap = \
+	{ &theClass::_GetBaseMessageMap, &theClass::_messageEntries[0] }; \
+	AFX_COMDAT const AFX_MSGMAP_ENTRY theClass::_messageEntries[] = \
+	{ \
+
+#else
+#define BEGIN_MESSAGE_MAP(theClass, baseClass) \
+	const AFX_MSGMAP* theClass::GetMessageMap() const \
+		{ return &theClass::messageMap; } \
+	AFX_COMDAT AFX_DATADEF const AFX_MSGMAP theClass::messageMap = \
+	{ &baseClass::messageMap, &theClass::_messageEntries[0] }; \
+	AFX_COMDAT const AFX_MSGMAP_ENTRY theClass::_messageEntries[] = \
+	{ \
+
+#endif
+
+*********************************************************************
+#ifdef _AFXDLL
+#define BEGIN_MESSAGE_MAP(theClass, baseClass) \
+	const AFX_MSGMAP* PASCAL theClass::_GetBaseMessageMap() \
+		{ return &baseClass::messageMap; } \
+	const AFX_MSGMAP* theClass::GetMessageMap() const \
+		{ return &theClass::messageMap; } \
+	AFX_COMDAT AFX_DATADEF const AFX_MSGMAP theClass::messageMap = \
+	{ &theClass::_GetBaseMessageMap, &theClass::_messageEntries[0] }; \
+	AFX_COMDAT const AFX_MSGMAP_ENTRY theClass::_messageEntries[] = \
+	{ \
+
+#else
+#define BEGIN_MESSAGE_MAP(theClass, baseClass) \
+	const AFX_MSGMAP* theClass::GetMessageMap() const \
+		{ return &theClass::messageMap; } \
+	AFX_COMDAT AFX_DATADEF const AFX_MSGMAP theClass::messageMap = \
+	{ &baseClass::messageMap, &theClass::_messageEntries[0] }; \
+	AFX_COMDAT const AFX_MSGMAP_ENTRY theClass::_messageEntries[] = \
+	{ \
+
+#endif
+**********************************************************************
+#define ON_MESSAGE(message, memberFxn) \
+	{ message, 0, 0, 0, AfxSig_lwl, \
+		(AFX_PMSG)(AFX_PMSGW)(LRESULT (AFX_MSG_CALL CWnd::*)(WPARAM, LPARAM))&memberFxn },
+
+***********************************************************************

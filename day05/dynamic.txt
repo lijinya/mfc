@@ -1,0 +1,91 @@
+#ifdef _AFXDLL
+#define DECLARE_DYNAMIC(class_name) \
+protected: \
+	static CRuntimeClass* PASCAL _GetBaseClass(); \
+public: \
+	static const AFX_DATA CRuntimeClass class##class_name; \
+	virtual CRuntimeClass* GetRuntimeClass() const; \
+
+#define _DECLARE_DYNAMIC(class_name) \
+protected: \
+	static CRuntimeClass* PASCAL _GetBaseClass(); \
+public: \
+	static AFX_DATA CRuntimeClass class##class_name; \
+	virtual CRuntimeClass* GetRuntimeClass() const; \
+
+#else
+#define DECLARE_DYNAMIC(class_name) \
+public: \
+	static const AFX_DATA CRuntimeClass class##class_name; \
+	virtual CRuntimeClass* GetRuntimeClass() const; \
+
+#define _DECLARE_DYNAMIC(class_name) \
+public: \
+	static AFX_DATA CRuntimeClass class##class_name; \
+	virtual CRuntimeClass* GetRuntimeClass() const; \
+
+#endif
+
+
+
+struct CRuntimeClass
+{
+// Attributes
+	LPCSTR m_lpszClassName;
+	int m_nObjectSize;
+	UINT m_wSchema; // schema number of the loaded class
+	CObject* (PASCAL* m_pfnCreateObject)(); // NULL => abstract class
+#ifdef _AFXDLL
+	CRuntimeClass* (PASCAL* m_pfnGetBaseClass)();
+#else
+	CRuntimeClass* m_pBaseClass;
+#endif
+
+// Operations
+	CObject* CreateObject();
+	BOOL IsDerivedFrom(const CRuntimeClass* pBaseClass) const;
+
+// Implementation
+	void Store(CArchive& ar) const;
+	static CRuntimeClass* PASCAL Load(CArchive& ar, UINT* pwSchemaNum);
+
+	// CRuntimeClass objects linked together in simple list
+	CRuntimeClass* m_pNextClass;       // linked list of registered classes
+};
+
+
+
+
+#ifdef _AFXDLL
+#define IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, wSchema, pfnNew) \
+	CRuntimeClass* PASCAL class_name::_GetBaseClass() \
+		{ return RUNTIME_CLASS(base_class_name); } \
+	AFX_COMDAT const AFX_DATADEF CRuntimeClass class_name::class##class_name = { \
+		#class_name, sizeof(class class_name), wSchema, pfnNew, \
+			&class_name::_GetBaseClass, NULL }; \
+	CRuntimeClass* class_name::GetRuntimeClass() const \
+		{ return RUNTIME_CLASS(class_name); } \
+
+#define _IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, wSchema, pfnNew) \
+	CRuntimeClass* PASCAL class_name::_GetBaseClass() \
+		{ return RUNTIME_CLASS(base_class_name); } \
+	AFX_COMDAT AFX_DATADEF CRuntimeClass class_name::class##class_name = { \
+		#class_name, sizeof(class class_name), wSchema, pfnNew, \
+			&class_name::_GetBaseClass, NULL }; \
+	CRuntimeClass* class_name::GetRuntimeClass() const \
+		{ return RUNTIME_CLASS(class_name); } \
+
+#else
+
+	AFX_COMDAT const AFX_DATADEF CRuntimeClass class_name::class##class_name = { \
+		#class_name, sizeof(class class_name), wSchema, pfnNew, \
+			RUNTIME_CLASS(base_class_name), NULL }; \
+	CRuntimeClass* class_name::GetRuntimeClass() const \
+		{ return RUNTIME_CLASS(class_name); } \
+
+#define _IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, wSchema, pfnNew) \
+	AFX_DATADEF CRuntimeClass class_name::class##class_name = { \
+		#class_name, sizeof(class class_name), wSchema, pfnNew, \
+			RUNTIME_CLASS(base_class_name), NULL }; \
+	CRuntimeClass* class_name::GetRuntimeClass() const \
+		{ return RUNTIME_CLASS(class_name); } \

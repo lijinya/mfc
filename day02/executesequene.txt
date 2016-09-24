@@ -1,0 +1,1126 @@
+执行流程:
+
+
+CMyWinApp theApp;
+
+CMyWinApp::CMyWinApp(){}
+
+CWinApp::CWinApp(LPCTSTR lpszAppName)
+{
+	if (lpszAppName != NULL)
+		m_pszAppName = _tcsdup(lpszAppName);
+	else
+		m_pszAppName = NULL;
+
+	// initialize CWinThread state
+1)	AFX_MODULE_STATE* pModuleState = _AFX_CMDTARGET_GETSTATE();
+2)	AFX_MODULE_THREAD_STATE* pThreadState = pModuleState->m_thread;
+3)	ASSERT(AfxGetThread() == NULL);
+	pThreadState->m_pCurrentWinThread = this;
+	ASSERT(AfxGetThread() == this);
+	m_hThread = ::GetCurrentThread();
+	m_nThreadID = ::GetCurrentThreadId();
+
+	// initialize CWinApp state
+	ASSERT(afxCurrentWinApp == NULL); // only one CWinApp object please
+	pModuleState->m_pCurrentWinApp = this;
+	ASSERT(AfxGetApp() == this);
+
+	// in non-running state until WinMain
+	m_hInstance = NULL;
+	m_pszHelpFilePath = NULL;
+	m_pszProfileName = NULL;
+	m_pszRegistryKey = NULL;
+	m_pszExeName = NULL;
+	m_pRecentFileList = NULL;
+	m_pDocManager = NULL;
+	m_atomApp = m_atomSystemTopic = NULL;
+	m_lpCmdLine = NULL;
+	m_pCmdInfo = NULL;
+
+	// initialize wait cursor state
+	m_nWaitCursorCount = 0;
+	m_hcurWaitCursorRestore = NULL;
+
+	// initialize current printer state
+	m_hDevMode = NULL;
+	m_hDevNames = NULL;
+	m_nNumPreviewPages = 0;     // not specified (defaults to 1)
+
+	// initialize DAO state
+	m_lpfnDaoTerm = NULL;   // will be set if AfxDaoInit called
+
+	// other initialization
+	m_bHelpMode = FALSE;
+	m_nSafetyPoolSize = 512;        // default size
+}
+*********************************************************
+///////全局变量 当前模块状态信息aaa
+AFX_MODULE_STATE* AFXAPI AfxGetModuleState()
+{
+	_AFX_THREAD_STATE* pState = _afxThreadState;
+	AFX_MODULE_STATE* pResult;
+	if (pState->m_pModuleState != NULL)
+	{
+		// thread state's module state serves as override
+		pResult = pState->m_pModuleState;
+	}
+	else
+	{
+		// otherwise, use global app state
+		pResult = _afxBaseModuleState.GetData();
+	}
+	ASSERT(pResult != NULL);
+	return pResult;
+}
+
+class CProcessLocal : public CProcessLocalObject
+{
+// Attributes
+public:
+	AFX_INLINE TYPE* GetData()
+	{
+		TYPE* pData = (TYPE*)CProcessLocalObject::GetData(&CreateObject);
+		ASSERT(pData != NULL);
+		return pData;
+	}
+	AFX_INLINE TYPE* GetDataNA()
+		{ return (TYPE*)m_pObject; }
+	AFX_INLINE operator TYPE*()
+		{ return GetData(); }
+	AFX_INLINE TYPE* operator->()
+		{ return GetData(); }
+
+// Implementation
+public:
+	static CNoTrackObject* AFXAPI CreateObject()
+		{ return new TYPE; }
+};
+****************************************************************************
+CWinThread* AFXAPI AfxGetThread()
+{
+	// check for current thread in module thread state
+	AFX_MODULE_THREAD_STATE* pState = AfxGetModuleThreadState();
+	CWinThread* pThread = pState->m_pCurrentWinThread;
+
+	// if no CWinThread for the module, then use the global app
+	if (pThread == NULL)
+		pThread = AfxGetApp();
+
+	return pThread;
+}
+
+AFX_MODULE_THREAD_STATE* AFXAPI AfxGetModuleThreadState()
+{
+	return AfxGetModuleState()->m_thread.GetData();
+}
+
+_AFXWIN_INLINE CWinApp* AFXAPI AfxGetApp()
+	{ return afxCurrentWinApp; }
+
+
+
+******************************************************************************
+******************************************************************************
+extern "C" int WINAPI
+_tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+	LPTSTR lpCmdLine, int nCmdShow)
+{
+	// call shared/exported WinMain
+	return AfxWinMain(hInstance, hPrevInstance, lpCmdLine, nCmdShow);
+}
+
+*********************
+int AFXAPI AfxWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+	LPTSTR lpCmdLine, int nCmdShow)
+{
+	ASSERT(hPrevInstance == NULL);
+
+	int nReturnCode = -1;
+	CWinThread* pThread = AfxGetThread();
+	CWinApp* pApp = AfxGetApp();
+
+	// AFX internal initialization
+	if (!AfxWinInit(hInstance, hPrevInstance, lpCmdLine, nCmdShow))
+		goto InitFailure;
+
+	// App global initializations (rare)
+	if (pApp != NULL && !pApp->InitApplication())
+		goto InitFailure;
+
+	// Perform specific initializations
+	if (!pThread->InitInstance())
+	{
+		if (pThread->m_pMainWnd != NULL)
+		{
+			TRACE0("Warning: Destroying non-NULL m_pMainWnd\n");
+			pThread->m_pMainWnd->DestroyWindow();
+		}
+		nReturnCode = pThread->ExitInstance();
+		goto InitFailure;
+	}
+	nReturnCode = pThread->Run();
+
+InitFailure:
+#ifdef _DEBUG
+	// Check for missing AfxLockTempMap calls
+	if (AfxGetModuleThreadState()->m_nTempMapLock != 0)
+	{
+		TRACE1("Warning: Temp map lock count non-zero (%ld).\n",
+			AfxGetModuleThreadState()->m_nTempMapLock);
+	}
+	AfxLockTempMaps();
+	AfxUnlockTempMaps(-1);
+#endif
+
+	AfxWinTerm();
+	return nReturnCode;
+}
+
+******************************************
+
+CWinThread* AFXAPI AfxGetThread()
+{
+	// check for current thread in module thread state
+	AFX_MODULE_THREAD_STATE* pState = AfxGetModuleThreadState();
+	CWinThread* pThread = pState->m_pCurrentWinThread;
+
+	// if no CWinThread for the module, then use the global app
+	if (pThread == NULL)
+		pThread = AfxGetApp();
+
+	return pThread;
+}
+********************************************
+_AFXWIN_INLINE CWinApp* AFXAPI AfxGetApp()
+	{ return afxCurrentWinApp; }
+********************************************
+BOOL AFXAPI AfxWinInit(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+	LPTSTR lpCmdLine, int nCmdShow)
+{
+	ASSERT(hPrevInstance == NULL);
+
+	// handle critical errors and avoid Windows message boxes
+	SetErrorMode(SetErrorMode(0) |
+		SEM_FAILCRITICALERRORS|SEM_NOOPENFILEERRORBOX);
+
+	// set resource handles
+	AFX_MODULE_STATE* pModuleState = AfxGetModuleState();
+	pModuleState->m_hCurrentInstanceHandle = hInstance;
+	pModuleState->m_hCurrentResourceHandle = hInstance;
+
+	// fill in the initial state for the application
+	CWinApp* pApp = AfxGetApp();
+	if (pApp != NULL)
+	{
+		// Windows specific initialization (not done if no CWinApp)
+		pApp->m_hInstance = hInstance;
+		pApp->m_hPrevInstance = hPrevInstance;
+		pApp->m_lpCmdLine = lpCmdLine;
+		pApp->m_nCmdShow = nCmdShow;
+		pApp->SetCurrentHandles();
+	}
+
+	// initialize thread specific data (for main thread)
+	if (!afxContextIsDLL)
+		AfxInitThread();
+
+	return TRUE;
+}
+************************************************
+AFX_MODULE_STATE* AFXAPI AfxGetModuleState()
+{
+	_AFX_THREAD_STATE* pState = _afxThreadState;
+	AFX_MODULE_STATE* pResult;
+	if (pState->m_pModuleState != NULL)
+	{
+		// thread state's module state serves as override
+		pResult = pState->m_pModuleState;
+	}
+	else
+	{
+		// otherwise, use global app state
+		pResult = _afxBaseModuleState.GetData();
+	}
+	ASSERT(pResult != NULL);
+	return pResult;
+}
+****************************************************
+#define afxCurrentWinApp    AfxGetModuleState()->m_pCurrentWinApp
+#define afxCurrentWinApp    AfxGetModuleState()->m_pCurrentWinApp
+*************************************************
+void AFXAPI AfxInitThread()
+{
+	if (!afxContextIsDLL)
+	{
+		// set message filter proc
+		_AFX_THREAD_STATE* pThreadState = AfxGetThreadState();
+		ASSERT(pThreadState->m_hHookOldMsgFilter == NULL);
+		pThreadState->m_hHookOldMsgFilter = ::SetWindowsHookEx(WH_MSGFILTER,
+			_AfxMsgFilterHook, NULL, ::GetCurrentThreadId());
+
+#ifndef _AFX_NO_CTL3D_SUPPORT
+		// intialize CTL3D for this thread
+		_AFX_CTL3D_STATE* pCtl3dState = _afxCtl3dState;
+		if (pCtl3dState->m_pfnAutoSubclass != NULL)
+			(*pCtl3dState->m_pfnAutoSubclass)(AfxGetInstanceHandle());
+
+		// allocate thread local _AFX_CTL3D_THREAD just for automatic termination
+		_AFX_CTL3D_THREAD* pTemp = _afxCtl3dThread;
+		pTemp;  // avoid unused warning
+#endif
+	}
+}
+***************************************************
+BOOL CWinApp::InitApplication()
+{
+	if (CDocManager::pStaticDocManager != NULL)
+	{
+		if (m_pDocManager == NULL)
+			m_pDocManager = CDocManager::pStaticDocManager;
+		CDocManager::pStaticDocManager = NULL;
+	}
+
+	if (m_pDocManager != NULL)
+		m_pDocManager->AddDocTemplate(NULL);
+	else
+		CDocManager::bStaticInit = FALSE;
+
+	return TRUE;
+}
+***************************************************
+void CWinApp::SetCurrentHandles()
+{
+	ASSERT(this == afxCurrentWinApp);
+	ASSERT(afxCurrentAppName == NULL);
+
+	AFX_MODULE_STATE* pModuleState = _AFX_CMDTARGET_GETSTATE();
+	pModuleState->m_hCurrentInstanceHandle = m_hInstance;
+	pModuleState->m_hCurrentResourceHandle = m_hInstance;
+
+	// Note: there are a number of _tcsdup (aka strdup) calls that are
+	// made here for the exe path, help file path, etc.  In previous
+	// versions of MFC, this memory was never freed.  In this and future
+	// versions this memory is automatically freed during CWinApp's
+	// destructor.  If you are freeing the memory yourself, you should
+	// either remove the code or set the pointers to NULL after freeing
+	// the memory.
+
+	// get path of executable
+	TCHAR szBuff[_MAX_PATH];
+	VERIFY(::GetModuleFileName(m_hInstance, szBuff, _MAX_PATH));
+
+	LPTSTR lpszExt = _tcsrchr(szBuff, '.');
+	ASSERT(lpszExt != NULL);
+	ASSERT(*lpszExt == '.');
+	*lpszExt = 0;       // no suffix
+
+	TCHAR szExeName[_MAX_PATH];
+	TCHAR szTitle[256];
+	// get the exe title from the full path name [no extension]
+	VERIFY(AfxGetFileName(szBuff, szExeName, _MAX_PATH) == 0);
+	if (m_pszExeName == NULL)
+	{
+		BOOL bEnable = AfxEnableMemoryTracking(FALSE);
+		m_pszExeName = _tcsdup(szExeName); // save non-localized name
+		AfxEnableMemoryTracking(bEnable);
+	}
+
+	// m_pszAppName is the name used to present to the user
+	if (m_pszAppName == NULL)
+	{
+		BOOL bEnable = AfxEnableMemoryTracking(FALSE);
+		if (AfxLoadString(AFX_IDS_APP_TITLE, szTitle) != 0)
+			m_pszAppName = _tcsdup(szTitle);    // human readable title
+		else
+			m_pszAppName = _tcsdup(m_pszExeName);   // same as EXE
+		AfxEnableMemoryTracking(bEnable);
+	}
+
+	pModuleState->m_lpszCurrentAppName = m_pszAppName;
+	ASSERT(afxCurrentAppName != NULL);
+
+	// get path of .HLP file
+	if (m_pszHelpFilePath == NULL)
+	{
+		lstrcpy(lpszExt, _T(".HLP"));
+		BOOL bEnable = AfxEnableMemoryTracking(FALSE);
+		m_pszHelpFilePath = _tcsdup(szBuff);
+		AfxEnableMemoryTracking(bEnable);
+		*lpszExt = '\0';       // back to no suffix
+	}
+
+	if (m_pszProfileName == NULL)
+	{
+		lstrcat(szExeName, _T(".INI")); // will be enough room in buffer
+		BOOL bEnable = AfxEnableMemoryTracking(FALSE);
+		m_pszProfileName = _tcsdup(szExeName);
+		AfxEnableMemoryTracking(bEnable);
+	}
+}
+*****************************************
+AfxWinMain中调用InitInstacne函数
+
+BOOL CMyWinApp::InitInstance(){
+		CMyFrameWnd *pFrame=new CMyFrameWnd();
+		pFrame->Create(NULL,"MFCCreate");
+		m_pMainWnd=pFrame;
+		pFrame->ShowWindow(SW_SHOW);
+		pFrame->UpdateWindow();
+		return TRUE;
+//	return CWinApp::InitInstance();
+}
+虚函数重写，调用子类
+***************************************************
+int CWinApp::Run()
+{
+	if (m_pMainWnd == NULL && AfxOleGetUserCtrl())
+	{
+		// Not launched /Embedding or /Automation, but has no main window!
+		TRACE0("Warning: m_pMainWnd is NULL in CWinApp::Run - quitting application.\n");
+		AfxPostQuitMessage(0);
+	}
+	return CWinThread::Run();
+}
+******************************************
+BOOL CWinThread::InitInstance()
+{
+	ASSERT_VALID(this);
+
+	return FALSE;   // by default don't enter run loop
+}
+******************************************************
+// main running routine until thread exits
+int CWinThread::Run()
+{
+	ASSERT_VALID(this);
+
+	// for tracking the idle time state
+	BOOL bIdle = TRUE;
+	LONG lIdleCount = 0;
+
+	// acquire and dispatch messages until a WM_QUIT message is received.
+	for (;;)
+	{
+		// phase1: check to see if we can do idle work
+		while (bIdle &&
+			!::PeekMessage(&m_msgCur, NULL, NULL, NULL, PM_NOREMOVE))
+		{
+			// call OnIdle while in bIdle state
+			if (!OnIdle(lIdleCount++))
+				bIdle = FALSE; // assume "no idle" state
+		}
+
+		// phase2: pump messages while available
+		do
+		{
+			// pump message, but quit on WM_QUIT
+			if (!PumpMessage())
+				return ExitInstance();
+
+			// reset "no idle" state after pumping "normal" message
+			if (IsIdleMessage(&m_msgCur))
+			{
+				bIdle = TRUE;
+				lIdleCount = 0;
+			}
+
+		} while (::PeekMessage(&m_msgCur, NULL, NULL, NULL, PM_NOREMOVE));
+	}
+
+	ASSERT(FALSE);  // not reachable
+}
+*******************************************************
+BOOL CWinThread::PumpMessage()
+{
+	ASSERT_VALID(this);
+
+	if (!::GetMessage(&m_msgCur, NULL, NULL, NULL))
+	{
+#ifdef _DEBUG
+		if (afxTraceFlags & traceAppMsg)
+			TRACE0("CWinThread::PumpMessage - Received WM_QUIT.\n");
+		m_nDisablePumpCount++; // application must die
+			// Note: prevents calling message loop things in 'ExitInstance'
+			// will never be decremented
+#endif
+		return FALSE;
+	}
+
+#ifdef _DEBUG
+	if (m_nDisablePumpCount != 0)
+	{
+		TRACE0("Error: CWinThread::PumpMessage called when not permitted.\n");
+		ASSERT(FALSE);
+	}
+#endif
+
+#ifdef _DEBUG
+	if (afxTraceFlags & traceAppMsg)
+		_AfxTraceMsg(_T("PumpMessage"), &m_msgCur);
+#endif
+
+	// process this message
+
+	if (m_msgCur.message != WM_KICKIDLE && !PreTranslateMessage(&m_msgCur))
+	{
+		::TranslateMessage(&m_msgCur);
+		::DispatchMessage(&m_msgCur);
+	}
+	return TRUE;
+}
+***********************************************
+BOOL CWinThread::PreTranslateMessage(MSG* pMsg)
+{
+	ASSERT_VALID(this);
+
+	// if this is a thread-message, short-circuit this function
+	if (pMsg->hwnd == NULL && DispatchThreadMessageEx(pMsg))
+		return TRUE;
+
+	// walk from target to main window
+	CWnd* pMainWnd = AfxGetMainWnd();
+	if (CWnd::WalkPreTranslateTree(pMainWnd->GetSafeHwnd(), pMsg))
+		return TRUE;
+
+	// in case of modeless dialogs, last chance route through main
+	//   window's accelerator table
+	if (pMainWnd != NULL)
+	{
+		 CWnd* pWnd = CWnd::FromHandle(pMsg->hwnd);
+		 if (pWnd->GetTopLevelParent() != pMainWnd)
+			return pMainWnd->PreTranslateMessage(pMsg);
+	}
+
+	return FALSE;   // no special processing
+}
+*******************************************
+BOOL CWinThread::DispatchThreadMessageEx(MSG* pMsg)
+{
+	const AFX_MSGMAP* pMessageMap; pMessageMap = GetMessageMap();
+	const AFX_MSGMAP_ENTRY* lpEntry;
+
+#ifdef _AFXDLL
+	for (/* pMessageMap already init'ed */; pMessageMap != NULL;
+		pMessageMap = (*pMessageMap->pfnGetBaseMap)())
+#else
+	for (/* pMessageMap already init'ed */; pMessageMap != NULL;
+		pMessageMap = pMessageMap->pBaseMap)
+#endif
+
+	{
+		// Note: catch not so common but fatal mistake!!
+		//      BEGIN_MESSAGE_MAP(CMyThread, CMyThread)
+#ifdef _AFXDLL
+		ASSERT(pMessageMap != (*pMessageMap->pfnGetBaseMap)());
+#else
+		ASSERT(pMessageMap != pMessageMap->pBaseMap);
+#endif
+
+		if (pMsg->message < 0xC000)
+		{
+			// constant window message
+			if ((lpEntry = AfxFindMessageEntry(pMessageMap->lpEntries,
+				pMsg->message, 0, 0)) != NULL)
+				goto LDispatch;
+		}
+		else
+		{
+			// registered windows message
+			lpEntry = pMessageMap->lpEntries;
+			while ((lpEntry = AfxFindMessageEntry(lpEntry, 0xC000, 0, 0)) != NULL)
+			{
+				UINT* pnID = (UINT*)(lpEntry->nSig);
+				ASSERT(*pnID >= 0xC000);
+					// must be successfully registered
+				if (*pnID == pMsg->message)
+					goto LDispatch;
+				lpEntry++;      // keep looking past this one
+			}
+		}
+	}
+	return FALSE;
+
+LDispatch:
+	union MessageMapFunctions mmf;
+	mmf.pfn = lpEntry->pfn;
+
+	// always posted, so return value is meaningless
+
+	(this->*mmf.pfn_THREAD)(pMsg->wParam, pMsg->lParam);
+	return TRUE;
+}
+********************************************************************
+const AFX_MSGMAP_ENTRY* AFXAPI
+AfxFindMessageEntry(const AFX_MSGMAP_ENTRY* lpEntry,
+	UINT nMsg, UINT nCode, UINT nID)
+{
+#if defined(_M_IX86) && !defined(_AFX_PORTABLE)
+// 32-bit Intel 386/486 version.
+
+	ASSERT(offsetof(AFX_MSGMAP_ENTRY, nMessage) == 0);
+	ASSERT(offsetof(AFX_MSGMAP_ENTRY, nCode) == 4);
+	ASSERT(offsetof(AFX_MSGMAP_ENTRY, nID) == 8);
+	ASSERT(offsetof(AFX_MSGMAP_ENTRY, nLastID) == 12);
+	ASSERT(offsetof(AFX_MSGMAP_ENTRY, nSig) == 16);
+
+	_asm
+	{
+			MOV     EBX,lpEntry
+			MOV     EAX,nMsg
+			MOV     EDX,nCode
+			MOV     ECX,nID
+	__loop:
+			CMP     DWORD PTR [EBX+16],0        ; nSig (0 => end)
+			JZ      __failed
+			CMP     EAX,DWORD PTR [EBX]         ; nMessage
+			JE      __found_message
+	__next:
+			ADD     EBX,SIZE AFX_MSGMAP_ENTRY
+			JMP     short __loop
+	__found_message:
+			CMP     EDX,DWORD PTR [EBX+4]       ; nCode
+			JNE     __next
+	// message and code good so far
+	// check the ID
+			CMP     ECX,DWORD PTR [EBX+8]       ; nID
+			JB      __next
+			CMP     ECX,DWORD PTR [EBX+12]      ; nLastID
+			JA      __next
+	// found a match
+			MOV     lpEntry,EBX                 ; return EBX
+			JMP     short __end
+	__failed:
+			XOR     EAX,EAX                     ; return NULL
+			MOV     lpEntry,EAX
+	__end:
+	}
+	return lpEntry;
+#else  // _AFX_PORTABLE
+	// C version of search routine
+	while (lpEntry->nSig != AfxSig_end)
+	{
+		if (lpEntry->nMessage == nMsg && lpEntry->nCode == nCode &&
+			nID >= lpEntry->nID && nID <= lpEntry->nLastID)
+		{
+			return lpEntry;
+		}
+		lpEntry++;
+	}
+	return NULL;    // not found
+#endif  // _AFX_PORTABLE
+}
+******************************************************************
+BOOL CWinThread::IsIdleMessage(MSG* pMsg)
+{
+	// Return FALSE if the message just dispatched should _not_
+	// cause OnIdle to be run.  Messages which do not usually
+	// affect the state of the user interface and happen very
+	// often are checked for.
+
+	// redundant WM_MOUSEMOVE and WM_NCMOUSEMOVE
+	if (pMsg->message == WM_MOUSEMOVE || pMsg->message == WM_NCMOUSEMOVE)
+	{
+		// mouse move at same position as last mouse move?
+		if (m_ptCursorLast == pMsg->pt && pMsg->message == m_nMsgLast)
+			return FALSE;
+
+		m_ptCursorLast = pMsg->pt;  // remember for next time
+		m_nMsgLast = pMsg->message;
+		return TRUE;
+	}
+
+	// WM_PAINT and WM_SYSTIMER (caret blink)
+	return pMsg->message != WM_PAINT && pMsg->message != 0x0118;
+}
+*************************************************
+BOOL CWnd::CreateEx(DWORD dwExStyle, LPCTSTR lpszClassName,
+	LPCTSTR lpszWindowName, DWORD dwStyle,
+	int x, int y, int nWidth, int nHeight,
+	HWND hWndParent, HMENU nIDorHMenu, LPVOID lpParam)
+{
+	// allow modification of several common create parameters
+	CREATESTRUCT cs;
+	cs.dwExStyle = dwExStyle;
+	cs.lpszClass = lpszClassName;
+	cs.lpszName = lpszWindowName;
+	cs.style = dwStyle;
+	cs.x = x;
+	cs.y = y;
+	cs.cx = nWidth;
+	cs.cy = nHeight;
+	cs.hwndParent = hWndParent;
+	cs.hMenu = nIDorHMenu;
+	cs.hInstance = AfxGetInstanceHandle();
+	cs.lpCreateParams = lpParam;
+
+	if (!PreCreateWindow(cs))
+	{
+		PostNcDestroy();
+		return FALSE;
+	}
+
+	AfxHookWindowCreate(this);
+	HWND hWnd = ::CreateWindowEx(cs.dwExStyle, cs.lpszClass,
+			cs.lpszName, cs.style, cs.x, cs.y, cs.cx, cs.cy,
+			cs.hwndParent, cs.hMenu, cs.hInstance, cs.lpCreateParams);
+
+#ifdef _DEBUG
+	if (hWnd == NULL)
+	{
+		TRACE1("Warning: Window creation failed: GetLastError returns 0x%8.8X\n",
+			GetLastError());
+	}
+#endif
+
+	if (!AfxUnhookWindowCreate())
+		PostNcDestroy();        // cleanup if CreateWindowEx fails too soon
+
+	if (hWnd == NULL)
+		return FALSE;
+	ASSERT(hWnd == m_hWnd); // should have been set in send msg hook
+	return TRUE;
+}
+*****************************************************
+_AFXWIN_INLINE HINSTANCE AFXAPI AfxGetInstanceHandle()
+	{ ASSERT(afxCurrentInstanceHandle != NULL);
+******************************************
+BOOL CFrameWnd::PreCreateWindow(CREATESTRUCT& cs)
+{
+	if (cs.lpszClass == NULL)
+	{
+		VERIFY(AfxDeferRegisterClass(AFX_WNDFRAMEORVIEW_REG));
+		cs.lpszClass = _afxWndFrameOrView;  // COLOR_WINDOW background
+	}
+
+	if ((cs.style & FWS_ADDTOTITLE) && afxData.bWin4)
+		cs.style |= FWS_PREFIXTITLE;
+
+	if (afxData.bWin4)
+		cs.dwExStyle |= WS_EX_CLIENTEDGE;
+
+	return TRUE;
+}
+*************************************************
+BOOL AFXAPI AfxEndDeferRegisterClass(LONG fToRegister)
+{
+	// mask off all classes that are already registered
+	AFX_MODULE_STATE* pModuleState = AfxGetModuleState();
+	fToRegister &= ~pModuleState->m_fRegisteredClasses;
+	if (fToRegister == 0)
+		return TRUE;
+
+	LONG fRegisteredClasses = 0;
+
+	// common initialization
+	WNDCLASS wndcls;
+	memset(&wndcls, 0, sizeof(WNDCLASS));   // start with NULL defaults
+	wndcls.lpfnWndProc = DefWindowProc;
+	wndcls.hInstance = AfxGetInstanceHandle();
+	wndcls.hCursor = afxData.hcurArrow;
+
+	INITCOMMONCONTROLSEX init;
+	init.dwSize = sizeof(init);
+
+	// work to register classes as specified by fToRegister, populate fRegisteredClasses as we go
+	if (fToRegister & AFX_WND_REG)
+	{
+		// Child windows - no brush, no icon, safest default class styles
+		wndcls.style = CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW;
+		wndcls.lpszClassName = _afxWnd;
+		if (AfxRegisterClass(&wndcls))
+			fRegisteredClasses |= AFX_WND_REG;
+	}
+	if (fToRegister & AFX_WNDOLECONTROL_REG)
+	{
+		// OLE Control windows - use parent DC for speed
+		wndcls.style |= CS_PARENTDC | CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW;
+		wndcls.lpszClassName = _afxWndOleControl;
+		if (AfxRegisterClass(&wndcls))
+			fRegisteredClasses |= AFX_WNDOLECONTROL_REG;
+	}
+	if (fToRegister & AFX_WNDCONTROLBAR_REG)
+	{
+		// Control bar windows
+		wndcls.style = 0;   // control bars don't handle double click
+		wndcls.lpszClassName = _afxWndControlBar;
+		wndcls.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+		if (AfxRegisterClass(&wndcls))
+			fRegisteredClasses |= AFX_WNDCONTROLBAR_REG;
+	}
+	if (fToRegister & AFX_WNDMDIFRAME_REG)
+	{
+		// MDI Frame window (also used for splitter window)
+		wndcls.style = CS_DBLCLKS;
+		wndcls.hbrBackground = NULL;
+		if (_AfxRegisterWithIcon(&wndcls, _afxWndMDIFrame, AFX_IDI_STD_MDIFRAME))
+			fRegisteredClasses |= AFX_WNDMDIFRAME_REG;
+	}
+	if (fToRegister & AFX_WNDFRAMEORVIEW_REG)
+	{
+		// SDI Frame or MDI Child windows or views - normal colors
+		wndcls.style = CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW;
+		wndcls.hbrBackground = (HBRUSH) (COLOR_WINDOW + 1);
+		if (_AfxRegisterWithIcon(&wndcls, _afxWndFrameOrView, AFX_IDI_STD_FRAME))
+			fRegisteredClasses |= AFX_WNDFRAMEORVIEW_REG;
+	}
+	if (fToRegister & AFX_WNDCOMMCTLS_REG)
+	{
+		// this flag is compatible with the old InitCommonControls() API
+		init.dwICC = ICC_WIN95_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WIN95CTLS_MASK);
+		fToRegister &= ~AFX_WIN95CTLS_MASK;
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_UPDOWN_REG)
+	{
+		init.dwICC = ICC_UPDOWN_CLASS;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_UPDOWN_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_TREEVIEW_REG)
+	{
+		init.dwICC = ICC_TREEVIEW_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_TREEVIEW_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_TAB_REG)
+	{
+		init.dwICC = ICC_TAB_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_TAB_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_PROGRESS_REG)
+	{
+		init.dwICC = ICC_PROGRESS_CLASS;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_PROGRESS_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_LISTVIEW_REG)
+	{
+		init.dwICC = ICC_LISTVIEW_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_LISTVIEW_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_HOTKEY_REG)
+	{
+		init.dwICC = ICC_HOTKEY_CLASS;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_HOTKEY_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_BAR_REG)
+	{
+		init.dwICC = ICC_BAR_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_BAR_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_ANIMATE_REG)
+	{
+		init.dwICC = ICC_ANIMATE_CLASS;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_ANIMATE_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_INTERNET_REG)
+	{
+		init.dwICC = ICC_INTERNET_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_INTERNET_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_COOL_REG)
+	{
+		init.dwICC = ICC_COOL_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_COOL_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_USEREX_REG)
+	{
+		init.dwICC = ICC_USEREX_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_USEREX_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_DATE_REG)
+	{
+		init.dwICC = ICC_DATE_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_DATE_REG);
+	}
+
+	// save new state of registered controls
+	pModuleState->m_fRegisteredClasses |= fRegisteredClasses;
+
+	// special case for all common controls registered, turn on AFX_WNDCOMMCTLS_REG
+	if ((pModuleState->m_fRegisteredClasses & AFX_WIN95CTLS_MASK) == AFX_WIN95CTLS_MASK)
+	{
+		pModuleState->m_fRegisteredClasses |= AFX_WNDCOMMCTLS_REG;
+		fRegisteredClasses |= AFX_WNDCOMMCTLS_REG;
+	}
+
+	// must have registered at least as mamy classes as requested
+	return (fToRegister & fRegisteredClasses) == fToRegister;
+}
+************************************************
+_AFXWIN_INLINE HINSTANCE AFXAPI AfxGetInstanceHandle()
+	{ ASSERT(afxCurrentInstanceHandle != NULL);
+********************************************
+AFX_STATIC BOOL AFXAPI _AfxRegisterWithIcon(WNDCLASS* pWndCls,
+	LPCTSTR lpszClassName, UINT nIDIcon)
+{
+	pWndCls->lpszClassName = lpszClassName;
+	HINSTANCE hInst = AfxFindResourceHandle(
+		MAKEINTRESOURCE(nIDIcon), RT_GROUP_ICON);
+	if ((pWndCls->hIcon = ::LoadIcon(hInst, MAKEINTRESOURCE(nIDIcon))) == NULL)
+	{
+		// use default icon
+		pWndCls->hIcon = ::LoadIcon(NULL, IDI_APPLICATION);
+	}
+	return AfxRegisterClass(pWndCls);
+}
+*******************************************
+_AFXWIN_INLINE HINSTANCE AFXAPI AfxGetResourceHandle()
+	{ ASSERT(afxCurrentResourceHandle != NULL);
+		return afxCurrentResourceHandle; }
+**********************************************
+BOOL AFXAPI AfxRegisterClass(WNDCLASS* lpWndClass)
+{
+	WNDCLASS wndcls;
+	if (GetClassInfo(lpWndClass->hInstance, lpWndClass->lpszClassName,
+		&wndcls))
+	{
+		// class already registered
+		return TRUE;
+	}
+
+	if (!::RegisterClass(lpWndClass))
+	{
+		TRACE1("Can't register window class named %s\n",
+			lpWndClass->lpszClassName);
+		return FALSE;
+	}
+
+	if (afxContextIsDLL)
+	{
+		AfxLockGlobals(CRIT_REGCLASSLIST);
+		TRY
+		{
+			// class registered successfully, add to registered list
+			AFX_MODULE_STATE* pModuleState = AfxGetModuleState();
+			LPTSTR lpszUnregisterList = pModuleState->m_szUnregisterList;
+			// the buffer is of fixed size -- ensure that it does not overflow
+			ASSERT(lstrlen(lpszUnregisterList) + 1 +
+				lstrlen(lpWndClass->lpszClassName) + 1 <
+				_countof(pModuleState->m_szUnregisterList));
+			// append classname + newline to m_szUnregisterList
+			lstrcat(lpszUnregisterList, lpWndClass->lpszClassName);
+			TCHAR szTemp[2];
+			szTemp[0] = '\n';
+			szTemp[1] = '\0';
+			lstrcat(lpszUnregisterList, szTemp);
+		}
+		CATCH_ALL(e)
+		{
+			AfxUnlockGlobals(CRIT_REGCLASSLIST);
+			THROW_LAST();
+			// Note: DELETE_EXCEPTION not required.
+		}
+		END_CATCH_ALL
+		AfxUnlockGlobals(CRIT_REGCLASSLIST);
+	}
+
+	return TRUE;
+}
+*********************************************************
+void AFXAPI AfxHookWindowCreate(CWnd* pWnd)
+{
+	_AFX_THREAD_STATE* pThreadState = _afxThreadState.GetData();
+	if (pThreadState->m_pWndInit == pWnd)
+		return;
+
+	if (pThreadState->m_hHookOldCbtFilter == NULL)
+	{
+		pThreadState->m_hHookOldCbtFilter = ::SetWindowsHookEx(WH_CBT,
+			_AfxCbtFilterHook, NULL, ::GetCurrentThreadId());
+		if (pThreadState->m_hHookOldCbtFilter == NULL)
+			AfxThrowMemoryException();
+	}
+	ASSERT(pThreadState->m_hHookOldCbtFilter != NULL);
+	ASSERT(pWnd != NULL);
+	ASSERT(pWnd->m_hWnd == NULL);   // only do once
+
+	ASSERT(pThreadState->m_pWndInit == NULL);   // hook not already in progress
+	pThreadState->m_pWndInit = pWnd;
+}
+*****************************************************
+inline void* CThreadSlotData::GetThreadValue(int nSlot)
+{
+	ASSERT(nSlot != 0 && nSlot < m_nMax);
+	ASSERT(m_pSlotData != NULL);
+	ASSERT(m_pSlotData[nSlot].dwFlags & SLOT_USED);
+	ASSERT(m_tlsIndex != (DWORD)-1);
+
+	CThreadData* pData = (CThreadData*)TlsGetValue(m_tlsIndex);
+	if (pData == NULL || nSlot >= pData->nCount)
+		return NULL;
+	return pData->pData[nSlot];
+}
+**************************************************
+BOOL AFXAPI AfxUnhookWindowCreate()
+{
+	_AFX_THREAD_STATE* pThreadState = _afxThreadState.GetData();
+#ifndef _AFXDLL
+	if (afxContextIsDLL && pThreadState->m_hHookOldCbtFilter != NULL)
+	{
+		::UnhookWindowsHookEx(pThreadState->m_hHookOldCbtFilter);
+		pThreadState->m_hHookOldCbtFilter = NULL;
+	}
+#endif
+	if (pThreadState->m_pWndInit != NULL)
+	{
+		pThreadState->m_pWndInit = NULL;
+		return FALSE;   // was not successfully hooked
+	}
+	return TRUE;
+}
+***************************************************
+AFX_MODULE_STATE* AFXAPI AfxGetModuleState()
+{
+	_AFX_THREAD_STATE* pState = _afxThreadState;
+	AFX_MODULE_STATE* pResult;
+	if (pState->m_pModuleState != NULL)
+	{
+		// thread state's module state serves as override
+		pResult = pState->m_pModuleState;
+	}
+	else
+	{
+		// otherwise, use global app state
+		pResult = _afxBaseModuleState.GetData();
+	}
+	ASSERT(pResult != NULL);
+	return pResult;
+}
+***********************************************************************
+
+CreateWindowEx(........)
+BOOL AFXAPI AfxUnhookWindowCreate()
+{
+	_AFX_THREAD_STATE* pThreadState = _afxThreadState.GetData();
+#ifndef _AFXDLL
+	if (afxContextIsDLL && pThreadState->m_hHookOldCbtFilter != NULL)
+	{
+		::UnhookWindowsHookEx(pThreadState->m_hHookOldCbtFilter);
+		pThreadState->m_hHookOldCbtFilter = NULL;
+	}
+#endif
+	if (pThreadState->m_pWndInit != NULL)
+	{
+		pThreadState->m_pWndInit = NULL;
+		return FALSE;   // was not successfully hooked
+	}
+	return TRUE;
+}
+
+*****************************
+
+inline CObject* CHandleMap::LookupPermanent(HANDLE h)
+	{ return (CObject*)m_permanentMap.GetValueAt((LPVOID)h); }	//获取窗口句柄
+inline CObject* CHandleMap::LookupTemporary(HANDLE h)
+	{ return (CObject*)m_temporaryMap.GetValueAt((LPVOID)h); }
+***************************************
+CWnd* PASCAL CWnd::FromHandlePermanent(HWND hWnd)
+{
+	CHandleMap* pMap = afxMapHWND();
+	CWnd* pWnd = NULL;
+	if (pMap != NULL)
+	{
+		// only look in the permanent map - does no allocations
+		pWnd = (CWnd*)pMap->LookupPermanent(hWnd);
+		ASSERT(pWnd == NULL || pWnd->m_hWnd == hWnd);
+	}
+	return pWnd;			//返回窗口对象
+}
+**********************************
+CHandleMap* PASCAL afxMapHWND(BOOL bCreate)
+{
+	AFX_MODULE_THREAD_STATE* pState = AfxGetModuleThreadState();
+	if (pState->m_pmapHWND == NULL && bCreate)
+	{
+		BOOL bEnable = AfxEnableMemoryTracking(FALSE);
+#ifndef _AFX_PORTABLE
+		_PNH pnhOldHandler = AfxSetNewHandler(&AfxCriticalNewHandler);
+#endif
+		pState->m_pmapHWND = new CHandleMap(RUNTIME_CLASS(CTempWnd),
+			offsetof(CWnd, m_hWnd));
+
+#ifndef _AFX_PORTABLE
+		AfxSetNewHandler(pnhOldHandler);
+#endif
+		AfxEnableMemoryTracking(bEnable);
+	}
+	return pState->m_pmapHWND;	//返回当前模块线程状态的map映射成员
+}
+****************************************
+AfxWndProc(HWND hWnd, UINT nMsg, WPARAM wParam, LPARAM lParam)
+{
+	// special message which identifies the window as using AfxWndProc
+	if (nMsg == WM_QUERYAFXWNDPROC)
+		return 1;
+
+	// all other messages route through message map
+	CWnd* pWnd = CWnd::FromHandlePermanent(hWnd);
+	ASSERT(pWnd != NULL);
+	ASSERT(pWnd->m_hWnd == hWnd);
+	if (pWnd == NULL || pWnd->m_hWnd != hWnd)
+		return ::DefWindowProc(hWnd, nMsg, wParam, lParam);
+	return AfxCallWndProc(pWnd, hWnd, nMsg, wParam, lParam);
+}
+***************************************************
+LRESULT AFXAPI AfxCallWndProc(CWnd* pWnd, HWND hWnd, UINT nMsg,
+	WPARAM wParam = 0, LPARAM lParam = 0)
+{
+	_AFX_THREAD_STATE* pThreadState = _afxThreadState.GetData();
+	MSG oldState = pThreadState->m_lastSentMsg;   // save for nesting
+	pThreadState->m_lastSentMsg.hwnd = hWnd;
+	pThreadState->m_lastSentMsg.message = nMsg;
+	pThreadState->m_lastSentMsg.wParam = wParam;
+	pThreadState->m_lastSentMsg.lParam = lParam;
+
+#ifdef _DEBUG
+	if (afxTraceFlags & traceWinMsg)
+		_AfxTraceMsg(_T("WndProc"), &pThreadState->m_lastSentMsg);
+#endif
+
+	// Catch exceptions thrown outside the scope of a callback
+	// in debug builds and warn the user.
+	LRESULT lResult;
+	TRY
+	{
+#ifndef _AFX_NO_OCC_SUPPORT
+		// special case for WM_DESTROY
+		if ((nMsg == WM_DESTROY) && (pWnd->m_pCtrlCont != NULL))
+			pWnd->m_pCtrlCont->OnUIActivate(NULL);
+#endif
+
+		// special case for WM_INITDIALOG
+		CRect rectOld;
+		DWORD dwStyle = 0;
+		if (nMsg == WM_INITDIALOG)
+			_AfxPreInitDialog(pWnd, &rectOld, &dwStyle);
+
+		// delegate to object's WindowProc
+		lResult = pWnd->WindowProc(nMsg, wParam, lParam);	//重写则调用自己的虚函数
+
+		// more special case for WM_INITDIALOG
+		if (nMsg == WM_INITDIALOG)
+			_AfxPostInitDialog(pWnd, rectOld, dwStyle);
+	}
+	CATCH_ALL(e)
+	{
+		CWinThread* pWinThread = AfxGetThread();
+		if ( pWinThread != NULL )
+		{
+			lResult = pWinThread->ProcessWndProcException(e, &pThreadState->m_lastSentMsg);
+			TRACE1("Warning: Uncaught exception in WindowProc (returning %ld).\n",
+				lResult);
+		}
+		else
+		{
+			TRACE0("Warning: Uncaught exception in WindowProc.\n");
+			lResult = 0;
+		}
+		DELETE_EXCEPTION(e);
+	}
+	END_CATCH_ALL
+
+	pThreadState->m_lastSentMsg = oldState;
+	return lResult;
+}
+**************************************************
+CreateWindowEx------>AfxWndProc(hWnd,...)
+**********************************************

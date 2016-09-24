@@ -1,0 +1,77 @@
+
+多文档视图应用程序
+	1,概念
+	可以同时管理多个文档,例如:word excel office等
+	2.相关类
+	CWinApp
+	CMDIFrameWnd   ---对文档主框架类
+	CMDIChildWnd   ---多文档子框架类
+	CView/CEditView
+	CMultiDocTemplate  --多文档程序模板
+
+	CDocument
+	主框架 子框架 资源不一样 要两套资源
+
+	3多文档视图程序创建过程
+	3.1 创建多文档模板类,并且添加到应用程序
+	3.2 创建和显示主框架窗口
+	3.3 调用OnFileNew函数,创建其他文档(文档,子框架,视图)
+	   3.3.1使用多文档模板创建模板对象
+	   3.3.2创建子框架对象及窗口
+	   3.3.3在子框架窗口的OnCreate函数,创建视图对象和窗口
+	   3.3.4在视图窗口的OnCreate函数,文档与视图相互保存对方的地址。
+
+常用函数:
+	AfxGetMainWnd   获取程序主框架窗口
+	AfxGetApp	获取theApp应用程序对象
+	CFrameWnd::GetActiveFrame	在多文档中获取当前活动的子框架窗口
+	CFrameWnd::GetActiveView	                        视图窗口
+		多文档  子框架
+		单文档  主框架
+	
+	CView::GetDocument    获取视图关联的文档
+
+	CDocument::GetDocTemplate  用于获取与文档关联的文档模板
+	CDocTemplate::CreateNewFrame	创建框架窗口
+	CDocTemplate::InitialUpdateFrame   初始化更新框架窗口
+
+	CDocument::UpdateAllViews       用来通知所有视图数据更新
+	引起所有视图的OnUpdate函数调用	当文档数据发生变化后调用
+	CView::OnInitialUpdate       视图类初始化函数 
+
+
+
+
+MFC绘图
+	CDC类 绘图设备类(纸),
+	CGdiObject  绘图对象(笔)
+
+	CDC使用
+	1 创建	CDC::CreateDC
+		virtual BOOL CreateDC( LPCTSTR lpszDriverName, LPCTSTR lpszDeviceName, 
+		LPCTSTR lpszOutput, const void* lpInitData );
+	2 使用	
+	3 删除	CDC::DeleteDC
+
+	CWindowDC,    父类CDC类   表示窗口dc,包括窗口客户区和非客户去   FrameWnd
+	CClientDC     父类CDC     表示窗口的客户区dc            Window
+	CPaintDC     父类CDC	  表示窗口客户区   只能在wm_PAINT消息中使用
+	CMetaFileDC	父类是CDC	用来保存绘制命令
+
+	CMetaFileDC	使用步骤	元文件dc
+	创建  CMetaFileDC::Create
+	绘制  CDC::TextOut/MoveTo/LineTo  等函数
+	关闭  返回句柄
+		HMETAFILE CMetaFileDC::Close( );
+	使用	CDC::PlayMetaFile
+	删除	BOOL DeleteMetaFile(
+			HMETAFILE hmf   // handle to Windows-format metafile
+			);
+
+
+
+CPen 画笔  定义现款 线型  线的颜色
+CBrush  画刷  颜色画刷 委托画刷
+CFont  字体
+CBitmap   位图
+CRgn  复杂区域,可以讲两个图形进行稽核运算,课多次运算,形成复杂程序

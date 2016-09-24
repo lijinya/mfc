@@ -1,0 +1,503 @@
+MFC文件操作
+	1.相关类
+	CFile类  封装了文件句柄以及相关操作的API
+	CFileFind类   封装了文件查找相关的类
+	 
+	2 CFile类的使用
+	2.1打开或者创建文件
+	2.2文件读写	通常放到宜昌处理结果中
+	2.3关闭文件
+
+
+
+CFileFind	
+	查找指定目录下的所有文件和文件夹  
+	开始查找
+	virtual BOOL FindFile( LPCTSTR pstrName = NULL, DWORD dwUnused = 0 );
+	查找下一个文件
+	virtual BOOL FindNextFile( );
+	GetXXX  或者  IsXXX,获取文件信息并判断。
+	CFileFind::Close ，结束查找
+
+
+序列化(串行化)
+	方便文件读写,避免类型转换
+	将数据以二进制流的方式保存到文件,或者重文件读取.
+
+	相关类
+	CFile
+	CArchive 归档类,执行具体的数据读写操作。使用该类替换CFile类的Read，Write函数
+	写操作“<<”
+	读操作“>>”
+
+	序列化的操作步骤
+		CFile::Open
+
+		定义CArchive类的对象
+		>>或<<,执行读写操作
+		关闭CArchive对象
+
+		CFile::Close()
+
+	对象的序列化。
+	将对象的所有数据以二进制流写入文件。
+	反序列化  从文件先读取类的信息,创建对象，然后读取对象的成员初始化新创建的对象。
+	对象的序列化以动态创建为必要条件。
+
+	定义一个支持序列化的类。
+		必须是CObject的子类
+		添加序列化的声明宏和实现宏
+		重写Serialize函数，在函数中序列化对象的成员。
+
+	1，_init_Cstudent  结构体变量,作用是调用AfxClassInfo
+	在函数中,获取应用程序的模块信息，将CStudent的运行时信息的地址保存到m_classList链表
+	中(m_classList是模块状态信息的成员)。
+	2，operator>>  友元函数加载CStudent类的对象
+
+	对象序列化过程。
+	序列化
+	调用ar.WriteObject()函数
+	在函数中,首先调用GetRuntimeClass函数获取CStudent类的运行时信息。
+	调用WriteClass函数,将类的信息写入到文件.
+	在store函数中依次将类的，版本，长度，名称 写入文件。
+	调用Serialize函数,函数中依次将CStudent类的成员变量写入到文件。
+
+	反序列化
+	ar.ReadObject
+	ReadClass->Load
+	Serialize
+
+
+	_AFX_INLINE CArchive& AFXAPI operator<<(CArchive& ar, const CObject* pOb)
+	{ ar.WriteObject(pOb); return ar; }
+
+void CArchive::WriteObject(const CObject* pOb)
+{
+	// object can be NULL
+	ASSERT(IsStoring());    // proper direction
+
+	DWORD nObIndex;
+	ASSERT(sizeof(nObIndex) == 4);
+	ASSERT(sizeof(wNullTag) == 2);
+	ASSERT(sizeof(wBigObjectTag) == 2);
+	ASSERT(sizeof(wNewClassTag) == 2);
+
+	// make sure m_pStoreMap is initialized
+	MapObject(NULL);
+
+	if (pOb == NULL)
+	{
+		// save out null tag to represent NULL pointer
+		*this << wNullTag;
+	}
+	else if ((nObIndex = (DWORD)(*m_pStoreMap)[(void*)pOb]) != 0)
+		// assumes initialized to 0 map
+	{
+		// save out index of already stored object
+		if (nObIndex < wBigObjectTag)
+			*this << (WORD)nObIndex;
+		else
+		{
+			*this << wBigObjectTag;
+			*this << nObIndex;
+		}
+	}
+	else
+	{
+		// write class of object first
+		CRuntimeClass* pClassRef = pOb->GetRuntimeClass();
+		WriteClass(pClassRef);
+
+		// enter in stored object table, checking for overflow
+		CheckCount();
+		(*m_pStoreMap)[(void*)pOb] = (void*)m_nMapCount++;
+
+		// cause the object to serialize itself
+		((CObject*)pOb)->Serialize(*this);
+	}
+}
+
+void CArchive::CheckCount()
+{
+	if (m_nMapCount >= nMaxMapCount)
+		AfxThrowArchiveException(CArchiveException::badIndex, m_strFileName);
+}
+
+_AFX_INLINE CArchive& CArchive::operator<<(WORD w)
+	{ if (m_lpBufCur + sizeof(WORD) > m_lpBufMax) Flush();
+
+void CRuntimeClass::Store(CArchive& ar) const
+	// stores a runtime class description
+{
+	WORD nLen = (WORD)lstrlenA(m_lpszClassName);
+	ar << (WORD)m_wSchema << nLen;
+	ar.Write(m_lpszClassName, nLen*sizeof(char));
+}
+
+CRuntimeClass* CObject::GetRuntimeClass() const
+{
+	return RUNTIME_CLASS(CObject);
+}
+
+void CArchive::WriteClass(const CRuntimeClass* pClassRef)
+{
+	ASSERT(pClassRef != NULL);
+	ASSERT(IsStoring());    // proper direction
+
+	if (pClassRef->m_wSchema == 0xFFFF)
+	{
+		TRACE1("Warning: Cannot call WriteClass/WriteObject for %hs.\n",
+			pClassRef->m_lpszClassName);
+		AfxThrowNotSupportedException();
+	}
+
+	// make sure m_pStoreMap is initialized
+	MapObject(NULL);
+
+	// write out class id of pOb, with high bit set to indicate
+	// new object follows
+
+	// ASSUME: initialized to 0 map
+	DWORD nClassIndex;
+	if ((nClassIndex = (DWORD)(*m_pStoreMap)[(void*)pClassRef]) != 0)
+	{
+		// previously seen class, write out the index tagged by high bit
+		if (nClassIndex < wBigObjectTag)
+			*this << (WORD)(wClassTag | nClassIndex);
+		else
+		{
+			*this << wBigObjectTag;
+			*this << (dwBigClassTag | nClassIndex);
+		}
+	}
+	else
+	{
+		// store new class
+		*this << wNewClassTag;
+		pClassRef->Store(*this);
+
+		// store new class reference in map, checking for overflow
+		CheckCount();
+		(*m_pStoreMap)[(void*)pClassRef] = (void*)m_nMapCount++;
+	}
+}
+
+#define DECLARE_SERIAL(class_name) \
+	_DECLARE_DYNCREATE(class_name) \
+	AFX_API friend CArchive& AFXAPI operator>>(CArchive& ar, class_name* &pOb);
+
+
+#define IMPLEMENT_SERIAL(class_name, base_class_name, wSchema) \
+	CObject* PASCAL class_name::CreateObject() \
+		{ return new class_name; } \
+	_IMPLEMENT_RUNTIMECLASS(class_name, base_class_name, wSchema, \
+		class_name::CreateObject) \
+	AFX_CLASSINIT _init_##class_name(RUNTIME_CLASS(class_name)); \
+	CArchive& AFXAPI operator>>(CArchive& ar, class_name* &pOb) \
+		{ pOb = (class_name*) ar.ReadObject(RUNTIME_CLASS(class_name)); \
+			return ar; } \
+
+
+
+struct CFileStatus
+{
+	CTime m_ctime;          // creation date/time of file
+	CTime m_mtime;          // last modification date/time of file
+	CTime m_atime;          // last access date/time of file
+	LONG m_size;            // logical size of file in bytes
+	BYTE m_attribute;       // logical OR of CFile::Attribute enum values
+	BYTE _m_padding;        // pad the structure to a WORD
+	TCHAR m_szFullName[_MAX_PATH]; // absolute path name
+
+#ifdef _DEBUG
+	void Dump(CDumpContext& dc) const;
+#endif
+};
+
+class CTimeSpan
+{
+public:
+
+// Constructors
+	CTimeSpan();
+	CTimeSpan(time_t time);
+	CTimeSpan(LONG lDays, int nHours, int nMins, int nSecs);
+
+	CTimeSpan(const CTimeSpan& timeSpanSrc);
+	const CTimeSpan& operator=(const CTimeSpan& timeSpanSrc);
+
+// Attributes
+	// extract parts
+	LONG GetDays() const;   // total # of days
+	LONG GetTotalHours() const;
+	int GetHours() const;
+	LONG GetTotalMinutes() const;
+	int GetMinutes() const;
+	LONG GetTotalSeconds() const;
+	int GetSeconds() const;
+
+// Operations
+	// time math
+	CTimeSpan operator-(CTimeSpan timeSpan) const;
+	CTimeSpan operator+(CTimeSpan timeSpan) const;
+	const CTimeSpan& operator+=(CTimeSpan timeSpan);
+	const CTimeSpan& operator-=(CTimeSpan timeSpan);
+	BOOL operator==(CTimeSpan timeSpan) const;
+	BOOL operator!=(CTimeSpan timeSpan) const;
+	BOOL operator<(CTimeSpan timeSpan) const;
+	BOOL operator>(CTimeSpan timeSpan) const;
+	BOOL operator<=(CTimeSpan timeSpan) const;
+	BOOL operator>=(CTimeSpan timeSpan) const;
+
+#ifdef _UNICODE
+	// for compatibility with MFC 3.x
+	CString Format(LPCSTR pFormat) const;
+#endif
+	CString Format(LPCTSTR pFormat) const;
+	CString Format(UINT nID) const;
+
+	// serialization
+#ifdef _DEBUG
+	friend CDumpContext& AFXAPI operator<<(CDumpContext& dc,CTimeSpan timeSpan);
+#endif
+	friend CArchive& AFXAPI operator<<(CArchive& ar, CTimeSpan timeSpan);
+	friend CArchive& AFXAPI operator>>(CArchive& ar, CTimeSpan& rtimeSpan);
+
+private:
+	time_t m_timeSpan;
+	friend class CTime;
+};
+
+
+class CFile : public CObject
+{
+	DECLARE_DYNAMIC(CFile)
+
+public:
+// Flag values
+	enum OpenFlags {
+		modeRead =          0x0000,
+		modeWrite =         0x0001,
+		modeReadWrite =     0x0002,
+		shareCompat =       0x0000,
+		shareExclusive =    0x0010,
+		shareDenyWrite =    0x0020,
+		shareDenyRead =     0x0030,
+		shareDenyNone =     0x0040,
+		modeNoInherit =     0x0080,
+		modeCreate =        0x1000,
+		modeNoTruncate =    0x2000,
+		typeText =          0x4000, // typeText and typeBinary are used in
+		typeBinary =   (int)0x8000 // derived classes only
+		};
+
+	enum Attribute {
+		normal =    0x00,
+		readOnly =  0x01,
+		hidden =    0x02,
+		system =    0x04,
+		volume =    0x08,
+		directory = 0x10,
+		archive =   0x20
+		};
+
+	enum SeekPosition { begin = 0x0, current = 0x1, end = 0x2 };
+
+	enum { hFileNull = -1 };
+
+// Constructors
+	CFile();
+	CFile(int hFile);
+	CFile(LPCTSTR lpszFileName, UINT nOpenFlags);
+
+// Attributes
+	UINT m_hFile;
+	operator HFILE() const;
+
+	virtual DWORD GetPosition() const;
+	BOOL GetStatus(CFileStatus& rStatus) const;
+	virtual CString GetFileName() const;
+	virtual CString GetFileTitle() const;
+	virtual CString GetFilePath() const;
+	virtual void SetFilePath(LPCTSTR lpszNewName);
+
+// Operations
+	virtual BOOL Open(LPCTSTR lpszFileName, UINT nOpenFlags,
+		CFileException* pError = NULL);
+
+	static void PASCAL Rename(LPCTSTR lpszOldName,
+				LPCTSTR lpszNewName);
+	static void PASCAL Remove(LPCTSTR lpszFileName);
+	static BOOL PASCAL GetStatus(LPCTSTR lpszFileName,
+				CFileStatus& rStatus);
+	static void PASCAL SetStatus(LPCTSTR lpszFileName,
+				const CFileStatus& status);
+
+	DWORD SeekToEnd();
+	void SeekToBegin();
+
+	// backward compatible ReadHuge and WriteHuge
+	DWORD ReadHuge(void* lpBuffer, DWORD dwCount);
+	void WriteHuge(const void* lpBuffer, DWORD dwCount);
+
+// Overridables
+	virtual CFile* Duplicate() const;
+
+	virtual LONG Seek(LONG lOff, UINT nFrom);
+	virtual void SetLength(DWORD dwNewLen);
+	virtual DWORD GetLength() const;
+
+	virtual UINT Read(void* lpBuf, UINT nCount);
+	virtual void Write(const void* lpBuf, UINT nCount);
+
+	virtual void LockRange(DWORD dwPos, DWORD dwCount);
+	virtual void UnlockRange(DWORD dwPos, DWORD dwCount);
+
+	virtual void Abort();
+	virtual void Flush();
+	virtual void Close();
+
+// Implementation
+public:
+	virtual ~CFile();
+#ifdef _DEBUG
+	virtual void AssertValid() const;
+	virtual void Dump(CDumpContext& dc) const;
+#endif
+	enum BufferCommand { bufferRead, bufferWrite, bufferCommit, bufferCheck };
+	virtual UINT GetBufferPtr(UINT nCommand, UINT nCount = 0,
+		void** ppBufStart = NULL, void** ppBufMax = NULL);
+
+protected:
+	BOOL m_bCloseOnDelete;
+	CString m_strFileName;
+};
+
+
+class CArchive
+{
+public:
+// Flag values
+	enum Mode { store = 0, load = 1, bNoFlushOnDelete = 2, bNoByteSwap = 4 };
+
+	CArchive(CFile* pFile, UINT nMode, int nBufSize = 4096, void* lpBuf = NULL);
+	~CArchive();
+
+// Attributes
+	BOOL IsLoading() const;
+	BOOL IsStoring() const;
+	BOOL IsByteSwapping() const;
+	BOOL IsBufferEmpty() const;
+
+	CFile* GetFile() const;
+	UINT GetObjectSchema(); // only valid when reading a CObject*
+	void SetObjectSchema(UINT nSchema);
+
+	// pointer to document being serialized -- must set to serialize
+	//  COleClientItems in a document!
+	CDocument* m_pDocument;
+
+// Operations
+	UINT Read(void* lpBuf, UINT nMax);
+	void Write(const void* lpBuf, UINT nMax);
+	void Flush();
+	void Close();
+	void Abort();   // close and shutdown without exceptions
+
+	// reading and writing strings
+	void WriteString(LPCTSTR lpsz);
+	LPTSTR ReadString(LPTSTR lpsz, UINT nMax);
+	BOOL ReadString(CString& rString);
+
+public:
+	// Object I/O is pointer based to avoid added construction overhead.
+	// Use the Serialize member function directly for embedded objects.
+	friend CArchive& AFXAPI operator<<(CArchive& ar, const CObject* pOb);
+
+	friend CArchive& AFXAPI operator>>(CArchive& ar, CObject*& pOb);
+	friend CArchive& AFXAPI operator>>(CArchive& ar, const CObject*& pOb);
+
+	// insertion operations
+	CArchive& operator<<(BYTE by);
+	CArchive& operator<<(WORD w);
+	CArchive& operator<<(LONG l);
+	CArchive& operator<<(DWORD dw);
+	CArchive& operator<<(float f);
+	CArchive& operator<<(double d);
+
+	CArchive& operator<<(int i);
+	CArchive& operator<<(short w);
+	CArchive& operator<<(char ch);
+	CArchive& operator<<(unsigned u);
+
+	// extraction operations
+	CArchive& operator>>(BYTE& by);
+	CArchive& operator>>(WORD& w);
+	CArchive& operator>>(DWORD& dw);
+	CArchive& operator>>(LONG& l);
+	CArchive& operator>>(float& f);
+	CArchive& operator>>(double& d);
+
+	CArchive& operator>>(int& i);
+	CArchive& operator>>(short& w);
+	CArchive& operator>>(char& ch);
+	CArchive& operator>>(unsigned& u);
+
+	// object read/write
+	CObject* ReadObject(const CRuntimeClass* pClass);
+	void WriteObject(const CObject* pOb);
+	// advanced object mapping (used for forced references)
+	void MapObject(const CObject* pOb);
+
+	// advanced versioning support
+	void WriteClass(const CRuntimeClass* pClassRef);
+	CRuntimeClass* ReadClass(const CRuntimeClass* pClassRefRequested = NULL,
+		UINT* pSchema = NULL, DWORD* pObTag = NULL);
+	void SerializeClass(const CRuntimeClass* pClassRef);
+
+	// advanced operations (used when storing/loading many objects)
+	void SetStoreParams(UINT nHashSize = 2053, UINT nBlockSize = 128);
+	void SetLoadParams(UINT nGrowBy = 1024);
+
+// Implementation
+public:
+	BOOL m_bForceFlat;  // for COleClientItem implementation (default TRUE)
+	BOOL m_bDirectBuffer;   // TRUE if m_pFile supports direct buffering
+	void FillBuffer(UINT nBytesNeeded);
+	void CheckCount();  // throw exception if m_nMapCount is too large
+
+	// special functions for reading and writing (16-bit compatible) counts
+	DWORD ReadCount();
+	void WriteCount(DWORD dwCount);
+
+	// public for advanced use
+	UINT m_nObjectSchema;
+	CString m_strFileName;
+
+protected:
+	// archive objects cannot be copied or assigned
+	CArchive(const CArchive& arSrc);
+	void operator=(const CArchive& arSrc);
+
+	BOOL m_nMode;
+	BOOL m_bUserBuf;
+	int m_nBufSize;
+	CFile* m_pFile;
+	BYTE* m_lpBufCur;
+	BYTE* m_lpBufMax;
+	BYTE* m_lpBufStart;
+
+	// array/map for CObject* and CRuntimeClass* load/store
+	UINT m_nMapCount;
+	union
+	{
+		CPtrArray* m_pLoadArray;
+		CMapPtrToPtr* m_pStoreMap;
+	};
+	// map to keep track of mismatched schemas
+	CMapPtrToPtr* m_pSchemaMap;
+
+	// advanced parameters (controls performance with large archives)
+	UINT m_nGrowSize;
+	UINT m_nHashSize;
+};

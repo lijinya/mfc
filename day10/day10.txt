@@ -1,0 +1,552 @@
+MFC对话框
+1分类
+	模式和非模式
+
+2相关类
+	CDialog  --父类 CWnd
+	CCommonDialog  通用对话框--父类CDialog 
+	CPropertypage  属性页对话框 --父类CDialog
+	   CpropertySheet类,与CPropertypage一起完成属性页的创建.
+	  
+3创建基于对话框的应用程序。
+	1.模式对话框
+	   添加对话框资源，定义相关联的对话框类。
+	   调用CDialog::DoModal函数创建和显示对话框。
+	   通过调用CDialog::OnOk和CDialog::OnCancel关闭对话框。
+	   virtual BOOL OnInitDialog( );	//初始化
+	2非模式对话框
+	   添加资源，定义相关联的对话框类
+	   创建和显示与一般框架窗口类似。
+	   处理对话框的关闭。	点击关闭按钮与cancel处理函数相同
+		virtual void OnOK( );
+		virtual void OnCancel( );
+		先调用父类的函数再销毁。
+
+		DestroyWindow
+		virtual void PostNcDestroy( );	//最后执行的函数
+		CWnd::PostNcDestroy 
+		先删除子类再删除父类。
+
+
+
+ DoModal函数调用
+	查找对话框资源。
+		hInst = AfxFindResourceHandle(m_lpszTemplateName, RT_DIALOG);
+		HRSRC hResource = ::FindResource(hInst, m_lpszTemplateName, RT_DIALOG);
+		hDialogTemplate = LoadResource(hInst, hResource);
+	将父窗口设置为不可用状态。
+		HWND hWndParent = PreModal();
+		AfxUnhookWindowCreate();
+		BOOL bEnableParent = FALSE;
+		if (hWndParent != NULL && ::IsWindowEnabled(hWndParent))
+		{
+			::EnableWindow(hWndParent, FALSE);
+			bEnableParent = TRUE;
+		}
+	创建非模式对话框,进入对话框消息循环。(父窗口不可用)
+		AfxHookWindowCreate(this);
+		if (CreateDlgIndirect(lpDialogTemplate,
+						CWnd::FromHandle(hWndParent), hInst))
+		{
+			if (m_nFlags & WF_CONTINUEMODAL)
+			{
+				// enter modal loop
+				DWORD dwFlags = MLF_SHOWONIDLE;
+				if (GetStyle() & DS_NOIDLEMSG)
+					dwFlags |= MLF_NOIDLEMSG;
+				VERIFY(RunModalLoop(dwFlags) == m_nModalResult);
+			}
+
+			// hide the window before enabling the parent, etc.
+			if (m_hWnd != NULL)
+				SetWindowPos(NULL, 0, 0, 0, 0, SWP_HIDEWINDOW|
+					SWP_NOSIZE|SWP_NOMOVE|SWP_NOACTIVATE|SWP_NOZORDER);
+		}
+	消息循环
+int CWnd::RunModalLoop(DWORD dwFlags)
+{
+	ASSERT(::IsWindow(m_hWnd)); // window must be created
+	ASSERT(!(m_nFlags & WF_MODALLOOP)); // window must not already be in modal state
+
+	// for tracking the idle time state
+	BOOL bIdle = TRUE;
+	LONG lIdleCount = 0;
+	BOOL bShowIdle = (dwFlags & MLF_SHOWONIDLE) && !(GetStyle() & WS_VISIBLE);
+	HWND hWndParent = ::GetParent(m_hWnd);
+	m_nFlags |= (WF_MODALLOOP|WF_CONTINUEMODAL);
+	MSG* pMsg = &AfxGetThread()->m_msgCur;
+
+	// acquire and dispatch messages until the modal state is done
+	for (;;)
+	{
+		ASSERT(ContinueModal());
+
+		// phase1: check to see if we can do idle work
+		while (bIdle &&
+			!::PeekMessage(pMsg, NULL, NULL, NULL, PM_NOREMOVE))
+		{
+			ASSERT(ContinueModal());
+
+			// show the dialog when the message queue goes idle
+			if (bShowIdle)
+			{
+				ShowWindow(SW_SHOWNORMAL);
+				UpdateWindow();
+				bShowIdle = FALSE;
+			}
+
+			// call OnIdle while in bIdle state
+			if (!(dwFlags & MLF_NOIDLEMSG) && hWndParent != NULL && lIdleCount == 0)
+			{
+				// send WM_ENTERIDLE to the parent
+				::SendMessage(hWndParent, WM_ENTERIDLE, MSGF_DIALOGBOX, (LPARAM)m_hWnd);
+			}
+			if ((dwFlags & MLF_NOKICKIDLE) ||
+				!SendMessage(WM_KICKIDLE, MSGF_DIALOGBOX, lIdleCount++))
+			{
+				// stop idle processing next time
+				bIdle = FALSE;
+			}
+		}
+
+		// phase2: pump messages while available
+		do
+		{
+			ASSERT(ContinueModal());
+
+			// pump message, but quit on WM_QUIT
+			if (!AfxGetThread()->PumpMessage())
+			{
+				AfxPostQuitMessage(0);
+				return -1;
+			}
+
+			// show the window when certain special messages rec'd
+			if (bShowIdle &&
+				(pMsg->message == 0x118 || pMsg->message == WM_SYSKEYDOWN))
+			{
+				ShowWindow(SW_SHOWNORMAL);
+				UpdateWindow();
+				bShowIdle = FALSE;
+			}
+
+			if (!ContinueModal())
+				goto ExitModal;
+
+			// reset "no idle" state after pumping "normal" message
+			if (AfxGetThread()->IsIdleMessage(pMsg))
+			{
+				bIdle = TRUE;
+				lIdleCount = 0;
+			}
+
+		} while (::PeekMessage(pMsg, NULL, NULL, NULL, PM_NOREMOVE));
+	}
+
+ExitModal:
+	m_nFlags &= ~(WF_MODALLOOP|WF_CONTINUEMODAL);
+	return m_nModalResult;
+}
+	点击ok和cancel按钮时先隐藏对话框窗口，然后将父窗口设置为可用和激活状态
+
+	BOOL CWnd::SetWindowPos(const CWnd* pWndInsertAfter, int x, int y, int cx,
+	int cy, UINT nFlags)
+	{
+	ASSERT(::IsWindow(m_hWnd));
+
+	if (m_pCtrlSite == NULL)
+		return ::SetWindowPos(m_hWnd, pWndInsertAfter->GetSafeHwnd(),
+			x, y, cx, cy, nFlags);
+	else
+		return m_pCtrlSite->SetWindowPos(pWndInsertAfter, x, y, cx, cy, nFlags);
+	}
+
+	调用DestroyWindow函数销毁对话框窗口。	//DoModal函数中调用。
+	返回DoModal函数的执行结果。IDOK:1 IDCANCEL:0
+	释放资源
+
+CMainFrame::OnDlgModal() line 116
+_AfxDispatchCmdMsg(CCmdTarget * 0x007f4008 {CMainFrame hWnd=0x00040696}, unsigned int 32771, int 0, void (void)* 0x0040117c CMainFrame::OnDlgModal(void), void * 0x00000000, unsigned int 12, AFX_CMDHANDLERINFO * 0x00000000) line 88
+CCmdTarget::OnCmdMsg(unsigned int 32771, int 0, void * 0x00000000, AFX_CMDHANDLERINFO * 0x00000000) line 302 + 39 bytes
+CFrameWnd::OnCmdMsg(unsigned int 32771, int 0, void * 0x00000000, AFX_CMDHANDLERINFO * 0x00000000) line 898 + 24 bytes
+CWnd::OnCommand(unsigned int 32771, long 0) line 2099
+CFrameWnd::OnCommand(unsigned int 32771, long 0) line 321
+CWnd::OnWndMsg(unsigned int 273, unsigned int 32771, long 0, long * 0x0018fc7c) line 1608 + 28 bytes
+CWnd::WindowProc(unsigned int 273, unsigned int 32771, long 0) line 1596 + 30 bytes
+AfxCallWndProc(CWnd * 0x007f4008 {CMainFrame hWnd=0x00040696}, HWND__ * 0x00040696, unsigned int 273, unsigned int 32771, long 0) line 215 + 26 bytes
+AfxWndProc(HWND__ * 0x00040696, unsigned int 273, unsigned int 32771, long 0) line 379
+AfxWndProcBase(HWND__ * 0x00040696, unsigned int 273, unsigned int 32771, long 0) line 220 + 21 bytes
+USER32! 765762fa()
+USER32! 76576d3a()
+USER32! 765777c4()
+USER32! 76577bca()
+CWinThread::PumpMessage() line 853
+CWinThread::Run() line 487 + 11 bytes
+CWinApp::Run() line 400
+AfxWinMain(HINSTANCE__ * 0x00400000, HINSTANCE__ * 0x00000000, char * 0x005458ba, int 1) line 49 + 11 bytes
+WinMain(HINSTANCE__ * 0x00400000, HINSTANCE__ * 0x00000000, char * 0x005458ba, int 1) line 30
+WinMainCRTStartup() line 330 + 54 bytes
+KERNEL32! 763633ca()
+NTDLL! 77149ed2()
+NTDLL! 77149ea5()
+
+
+
+int CDialog::DoModal()
+{
+	// can be constructed with a resource template or InitModalIndirect
+	ASSERT(m_lpszTemplateName != NULL || m_hDialogTemplate != NULL ||
+		m_lpDialogTemplate != NULL);
+
+	// load resource as necessary
+	LPCDLGTEMPLATE lpDialogTemplate = m_lpDialogTemplate;
+	HGLOBAL hDialogTemplate = m_hDialogTemplate;
+	HINSTANCE hInst = AfxGetResourceHandle();
+	if (m_lpszTemplateName != NULL)
+	{
+		hInst = AfxFindResourceHandle(m_lpszTemplateName, RT_DIALOG);
+		HRSRC hResource = ::FindResource(hInst, m_lpszTemplateName, RT_DIALOG);
+		hDialogTemplate = LoadResource(hInst, hResource);
+	}
+	if (hDialogTemplate != NULL)
+		lpDialogTemplate = (LPCDLGTEMPLATE)LockResource(hDialogTemplate);
+
+	// return -1 in case of failure to load the dialog template resource
+	if (lpDialogTemplate == NULL)
+		return -1;
+
+	// disable parent (before creating dialog)
+	HWND hWndParent = PreModal();
+	AfxUnhookWindowCreate();
+	BOOL bEnableParent = FALSE;
+	if (hWndParent != NULL && ::IsWindowEnabled(hWndParent))
+	{
+		::EnableWindow(hWndParent, FALSE);
+		bEnableParent = TRUE;
+	}
+
+	TRY
+	{
+		// create modeless dialog
+		AfxHookWindowCreate(this);
+		if (CreateDlgIndirect(lpDialogTemplate,
+						CWnd::FromHandle(hWndParent), hInst))
+		{
+			if (m_nFlags & WF_CONTINUEMODAL)
+			{
+				// enter modal loop
+				DWORD dwFlags = MLF_SHOWONIDLE;
+				if (GetStyle() & DS_NOIDLEMSG)
+					dwFlags |= MLF_NOIDLEMSG;
+				VERIFY(RunModalLoop(dwFlags) == m_nModalResult);
+			}
+
+			// hide the window before enabling the parent, etc.
+			if (m_hWnd != NULL)
+				SetWindowPos(NULL, 0, 0, 0, 0, SWP_HIDEWINDOW|
+					SWP_NOSIZE|SWP_NOMOVE|SWP_NOACTIVATE|SWP_NOZORDER);
+		}
+	}
+	CATCH_ALL(e)
+	{
+		DELETE_EXCEPTION(e);
+		m_nModalResult = -1;
+	}
+	END_CATCH_ALL
+
+	if (bEnableParent)
+		::EnableWindow(hWndParent, TRUE);
+	if (hWndParent != NULL && ::GetActiveWindow() == m_hWnd)
+		::SetActiveWindow(hWndParent);
+
+	// destroy modal window
+	DestroyWindow();
+	PostModal();
+
+	// unlock/free resources as necessary
+	if (m_lpszTemplateName != NULL || m_hDialogTemplate != NULL)
+		UnlockResource(hDialogTemplate);
+	if (m_lpszTemplateName != NULL)
+		FreeResource(hDialogTemplate);
+
+	return m_nModalResult;
+}
+
+**********************************************************
+对话框数据交换技术  DDX
+	将控件与类的成员变量绑定，通过操作成员变量来达到操作控件的目的。
+	相关的几个函数。
+	DDX_Control  将控件与控件类型的变量绑定
+	DDX_Text     将控件与值类型的变量绑定。
+
+	2包含一些绑定函数的函数
+	DoDataExchange	数据交换函数。
+
+	3 UpdateData    数据更新函数。
+	通常需要程序员调用。
+	UpdateData(TRUE)  将用户在控件上输入或者选择的值传递给它绑定的变量
+	UpdateData(FALSE) 变量的值传递给预支绑定的控件。
+
+	
+
+DDX 使用
+	virtual void DoDataExchange( 
+	CDataExchange* pDX ); 
+
+	void AFXAPI DDX_Control(CDataExchange* pDX, int nIDC, CWnd& rControl)
+	{
+		if (rControl.m_hWnd == NULL)    // not subclassed yet
+		{
+			ASSERT(!pDX->m_bSaveAndValidate);
+
+			HWND hWndCtrl = pDX->PrepareCtrl(nIDC);
+
+			if (!rControl.SubclassWindow(hWndCtrl))
+			{
+				ASSERT(FALSE);      // possibly trying to subclass twice?
+				AfxThrowNotSupportedException();
+			}
+			#ifndef _AFX_NO_OCC_SUPPORT
+			else
+			{
+				// If the control has reparented itself (e.g., invisible control),
+				// make sure that the CWnd gets properly wired to its control site.
+				if (pDX->m_pDlgWnd->m_hWnd != ::GetParent(rControl.m_hWnd))
+					rControl.AttachControlSite(pDX->m_pDlgWnd);
+			}
+			#endif //!_AFX_NO_OCC_SUPPORT
+
+		}
+	}
+	
+
+
+DDX_Control(CDataExchange * 0x0018f590, int 1, CWnd & {CWnd hWnd=0x00000000}) line 621
+CMyDlg::DoDataExchange(CDataExchange * 0x0018f590) line 18
+CWnd::UpdateData(int 0) line 3120
+CDialog::OnInitDialog() line 680 + 10 bytes
+CMyDlg::OnInitDialog() line 27 + 8 bytes
+AfxDlgProc(HWND__ * 0x005d0746, unsigned int 272, unsigned int 591518, unsigned int 591518) line 35 + 14 bytes
+USER32! 765762fa()
+USER32! 7659f9df()
+USER32! 7659f784()
+USER32! 7658afac()
+USER32! 765762fa()
+USER32! 76576d3a()
+USER32! 76580d27()
+USER32! 7658794a()
+CWnd::DefWindowProcA(unsigned int 272, unsigned int 591518, long 0) line 1011 + 32 bytes
+CWnd::Default() line 258
+CDialog::HandleInitDialog(unsigned int 591518, unsigned int 591518) line 624 + 8 bytes
+CWnd::OnWndMsg(unsigned int 272, unsigned int 591518, long 0, long * 0x0018f9c4) line 1826 + 17 bytes
+CWnd::WindowProc(unsigned int 272, unsigned int 591518, long 0) line 1596 + 30 bytes
+AfxCallWndProc(CWnd * 0x0018fdfc {CMyDlg hWnd=0x005d0746}, HWND__ * 0x005d0746, unsigned int 272, unsigned int 591518, long 0) line 215 + 26 bytes
+AfxWndProc(HWND__ * 0x005d0746, unsigned int 272, unsigned int 591518, long 0) line 379
+AfxWndProcBase(HWND__ * 0x005d0746, unsigned int 272, unsigned int 591518, long 0) line 220 + 21 bytes
+USER32! 765762fa()
+USER32! 76576d3a()
+USER32! 7657965e()
+USER32! 765a206f()
+USER32! 765a10d3()
+USER32! 7658b044()
+CWnd::CreateDlgIndirect(const DLGTEMPLATE * 0x00417170, CWnd * 0x00000000 {CWnd hWnd=???}, HINSTANCE__ * 0x00400000) line 327 + 36 bytes
+CDialog::DoModal() line 531 + 32 bytes
+CDlgDDXApp::InitInstance() line 47
+AfxWinMain(HINSTANCE__ * 0x00400000, HINSTANCE__ * 0x00000000, char * 0x005d589c, int 1) line 39 + 11 bytes
+WinMain(HINSTANCE__ * 0x00400000, HINSTANCE__ * 0x00000000, char * 0x005d589c, int 1) line 30
+WinMainCRTStartup() line 330 + 54 bytes
+KERNEL32! 763633ca()
+NTDLL! 77149ed2()
+NTDLL! 77149ea5()
+
+
+
+DDX实现原理
+	DDX_Control,控件 类型的绑定
+		调用PrepareCtrl,通过调用资源ID得到控件的句柄
+		调用SubclassWindow,在函数中，调用Attach函数,
+	将控件类型的变量与控件句柄绑定。
+	DDX_Text,值类型的绑定
+	    调用PrepareEditCtrl， 通过资源ID获取控件的句柄。
+	    根据UpdateData()函数的参数的值,调用AfxGetWindowText/AfxSetWindowText
+	    获取控件的值赋值给变量/吧变量的值传递给控件。
+	
+	CMyDlg::OnInitDialog
+	->CDialog::OnInitDialog
+	->UpdateData
+	->DoDataExchange
+	->DDX_Control/DDX_Text
+
+	BOOL CDialog::OnInitDialog()
+{
+	// execute dialog RT_DLGINIT resource
+	BOOL bDlgInit;
+	if (m_lpDialogInit != NULL)
+		bDlgInit = ExecuteDlgInit(m_lpDialogInit);
+	else
+		bDlgInit = ExecuteDlgInit(m_lpszTemplateName);
+
+	if (!bDlgInit)
+	{
+		TRACE0("Warning: ExecuteDlgInit failed during dialog init.\n");
+		EndDialog(-1);
+		return FALSE;
+	}
+
+	// transfer data into the dialog from member variables
+	if (!UpdateData(FALSE))
+	{
+		TRACE0("Warning: UpdateData failed during dialog init.\n");
+		EndDialog(-1);
+		return FALSE;
+	}
+
+	// enable/disable help button automatically
+	CWnd* pHelpButton = GetDlgItem(ID_HELP);
+	if (pHelpButton != NULL)
+		pHelpButton->ShowWindow(AfxHelpEnabled() ? SW_SHOW : SW_HIDE);
+
+	return TRUE;    // set focus to first one
+}
+
+
+BOOL CWnd::UpdateData(BOOL bSaveAndValidate)
+{
+	ASSERT(::IsWindow(m_hWnd)); // calling UpdateData before DoModal?
+
+	CDataExchange dx(this, bSaveAndValidate);
+
+	// prevent control notifications from being dispatched during UpdateData
+	_AFX_THREAD_STATE* pThreadState = AfxGetThreadState();
+	HWND hWndOldLockout = pThreadState->m_hLockoutNotifyWindow;
+	ASSERT(hWndOldLockout != m_hWnd);   // must not recurse
+	pThreadState->m_hLockoutNotifyWindow = m_hWnd;
+
+	BOOL bOK = FALSE;       // assume failure
+	TRY
+	{
+		DoDataExchange(&dx);  ------------------------------->调用子类
+		bOK = TRUE;         // it worked
+	}
+	CATCH(CUserException, e)
+	{
+		// validation failed - user already alerted, fall through
+		ASSERT(!bOK);
+		// Note: DELETE_EXCEPTION_(e) not required
+	}
+	AND_CATCH_ALL(e)
+	{
+		// validation failed due to OOM or other resource failure
+		e->ReportError(MB_ICONEXCLAMATION, AFX_IDP_INTERNAL_FAILURE);
+		ASSERT(!bOK);
+		DELETE_EXCEPTION(e);
+	}
+	END_CATCH_ALL
+
+	pThreadState->m_hLockoutNotifyWindow = hWndOldLockout;
+	return bOK;
+}
+
+HWND CDataExchange::PrepareCtrl(int nIDC)
+{
+	ASSERT(nIDC != 0);
+	ASSERT(nIDC != -1); // not allowed
+	HWND hWndCtrl;
+	m_pDlgWnd->GetDlgItem(nIDC, &hWndCtrl);
+	if (hWndCtrl == NULL)
+	{
+		TRACE1("Error: no data exchange control with ID 0x%04X.\n", nIDC);
+		ASSERT(FALSE);
+		AfxThrowNotSupportedException();
+	}
+	m_hWndLastControl = hWndCtrl;
+	m_bEditLastControl = FALSE; // not an edit item by default
+	ASSERT(hWndCtrl != NULL);   // never return NULL handle
+	return hWndCtrl;
+}
+
+void CWnd::GetDlgItem(int nID, HWND* phWnd) const
+{
+	ASSERT(::IsWindow(m_hWnd));
+	ASSERT(phWnd != NULL);
+
+	if (m_pCtrlCont == NULL)
+		*phWnd = ::GetDlgItem(m_hWnd, nID);
+	else
+		m_pCtrlCont->GetDlgItem(nID, phWnd);
+}
+
+
+BOOL CWnd::SubclassWindow(HWND hWnd)
+{
+	if (!Attach(hWnd))
+		return FALSE;
+
+	// allow any other subclassing to occur
+	PreSubclassWindow();
+
+	// now hook into the AFX WndProc
+	WNDPROC* lplpfn = GetSuperWndProcAddr();
+	WNDPROC oldWndProc = (WNDPROC)::SetWindowLong(hWnd, GWL_WNDPROC,
+		(DWORD)AfxGetAfxWndProc());
+	ASSERT(oldWndProc != (WNDPROC)AfxGetAfxWndProc());
+
+	if (*lplpfn == NULL)
+		*lplpfn = oldWndProc;   // the first control of that type created
+#ifdef _DEBUG
+	else if (*lplpfn != oldWndProc)
+	{
+		TRACE0("Error: Trying to use SubclassWindow with incorrect CWnd\n");
+		TRACE0("\tderived class.\n");
+		TRACE3("\thWnd = $%04X (nIDC=$%04X) is not a %hs.\n", (UINT)hWnd,
+			_AfxGetDlgCtrlID(hWnd), GetRuntimeClass()->m_lpszClassName);
+		ASSERT(FALSE);
+		// undo the subclassing if continuing after assert
+		::SetWindowLong(hWnd, GWL_WNDPROC, (DWORD)oldWndProc);
+	}
+#endif
+
+	return TRUE;
+}
+
+************************
+void AFXAPI DDX_Text(CDataExchange* pDX, int nIDC, CString& value)
+{
+	HWND hWndCtrl = pDX->PrepareEditCtrl(nIDC);
+	if (pDX->m_bSaveAndValidate)
+	{
+		int nLen = ::GetWindowTextLength(hWndCtrl);
+		::GetWindowText(hWndCtrl, value.GetBufferSetLength(nLen), nLen+1);
+		value.ReleaseBuffer();
+	}
+	else
+	{
+		AfxSetWindowText(hWndCtrl, value);
+	}
+}
+
+HWND CDataExchange::PrepareEditCtrl(int nIDC)
+{
+	HWND hWndCtrl = PrepareCtrl(nIDC);
+	ASSERT(hWndCtrl != NULL);
+	m_bEditLastControl = TRUE;
+	return hWndCtrl;
+}
+
+_AFX_INLINE CString::operator LPCTSTR() const
+	{ return m_pchData; }
+
+
+void AFXAPI AfxSetWindowText(HWND hWndCtrl, LPCTSTR lpszNew)
+{
+	int nNewLen = lstrlen(lpszNew);
+	TCHAR szOld[256];
+	// fast check to see if text really changes (reduces flash in controls)
+	if (nNewLen > _countof(szOld) ||
+		::GetWindowText(hWndCtrl, szOld, _countof(szOld)) != nNewLen ||
+		lstrcmp(szOld, lpszNew) != 0)
+	{
+		// change it
+		::SetWindowText(hWndCtrl, lpszNew);
+	}
+}

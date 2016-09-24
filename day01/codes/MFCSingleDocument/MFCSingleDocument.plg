@@ -1,0 +1,55 @@
+<html>
+<body>
+<pre>
+<h1>Build Log</h1>
+<h3>
+--------------------Configuration: MFCSingleDocument - Win32 Debug--------------------
+</h3>
+<h3>Command Lines</h3>
+Creating temporary file "C:\Users\lijinya\AppData\Local\Temp\RSPC65E.tmp" with contents
+[
+/nologo /MDd /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_AFXDLL" /D "_MBCS" /FR"Debug/" /Fp"Debug/MFCSingleDocument.pch" /Yu"stdafx.h" /Fo"Debug/" /Fd"Debug/" /FD /GZ   /c 
+"D:\mfc\day01\codes\MFCSingleDocument\MFCSingleDocument.cpp"
+"D:\mfc\day01\codes\MFCSingleDocument\MainFrm.cpp"
+"D:\mfc\day01\codes\MFCSingleDocument\MFCSingleDocumentDoc.cpp"
+"D:\mfc\day01\codes\MFCSingleDocument\MFCSingleDocumentView.cpp"
+]
+Creating command line "cl.exe @C:\Users\lijinya\AppData\Local\Temp\RSPC65E.tmp" 
+Creating temporary file "C:\Users\lijinya\AppData\Local\Temp\RSPC65F.tmp" with contents
+[
+/nologo /MDd /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_AFXDLL" /D "_MBCS" /FR"Debug/" /Fp"Debug/MFCSingleDocument.pch" /Yc"stdafx.h" /Fo"Debug/" /Fd"Debug/" /FD /GZ   /c 
+"D:\mfc\day01\codes\MFCSingleDocument\StdAfx.cpp"
+]
+Creating command line "cl.exe @C:\Users\lijinya\AppData\Local\Temp\RSPC65F.tmp" 
+Creating temporary file "C:\Users\lijinya\AppData\Local\Temp\RSPC660.tmp" with contents
+[
+/nologo /subsystem:windows /incremental:yes /pdb:"Debug/MFCSingleDocument.pdb" /debug /machine:I386 /out:"Debug/MFCSingleDocument.exe" /pdbtype:sept 
+.\Debug\MFCSingleDocument.obj
+.\Debug\StdAfx.obj
+.\Debug\MainFrm.obj
+.\Debug\MFCSingleDocumentDoc.obj
+.\Debug\MFCSingleDocumentView.obj
+.\Debug\MFCSingleDocument.res
+]
+Creating command line "link.exe @C:\Users\lijinya\AppData\Local\Temp\RSPC660.tmp"
+<h3>Output Window</h3>
+Compiling...
+StdAfx.cpp
+Compiling...
+MFCSingleDocument.cpp
+MainFrm.cpp
+MFCSingleDocumentDoc.cpp
+MFCSingleDocumentView.cpp
+Generating Code...
+Linking...
+Creating command line "bscmake.exe /nologo /o"Debug/MFCSingleDocument.bsc"  .\Debug\StdAfx.sbr .\Debug\MFCSingleDocument.sbr .\Debug\MainFrm.sbr .\Debug\MFCSingleDocumentDoc.sbr .\Debug\MFCSingleDocumentView.sbr"
+Creating browse info file...
+<h3>Output Window</h3>
+
+
+
+<h3>Results</h3>
+MFCSingleDocument.exe - 0 error(s), 0 warning(s)
+</pre>
+</body>
+</html>

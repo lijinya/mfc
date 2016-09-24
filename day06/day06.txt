@@ -1,0 +1,574 @@
+一文档类
+1，MFC文档相关类
+	用于管理数据,封装了数据和视图窗口之间的操作。CDocument --父类CCmdTarget
+2,使用
+	1，利用CFrameWnd::LoadFrame函数创建框架窗口
+	2，在框架窗口的WM_CREATE消息中创建视图窗口
+	3，将视图窗口的WM_REATE消息中将视图类对象和文档类对象进行关系(建立绑定关系)
+
+3.对象关系图
+	theApp
+	  |-->m_pMainWnd
+		|-->m_pViewActive
+			|-->m_pDocument
+				|-->m_viewList(视图类对象链表)
+4.命令消息处理顺序
+	默认 View-->Document-->FrameWnd-->WinApp
+	注意顺序可任意更改,也可以添加自己的消息处理类(继承自CCmdTarget)
+
+
+二 单文档视图构架
+	1.相关类
+	CWinApp/CFrameWnd/CView/CDocument - 文档类
+	CDocTemplate - 文档模板类 (抽象类)
+	   CSingleDocTemplate  --单文档模板类
+	   CMultiDocTemplate   --多文档模板类
+
+	   CDocManager         --文档管理类
+	 2.使用
+		关系
+		theApp
+		   |->m_pDocManager(保存了文档管理类对象地址)
+			|->m_templateList(文档管理类的链表成员)
+			|------>|->CSingleDocTemplate
+			^
+			|
+		CSingleDocTemplate
+			|->m_pDocClass (保存了&CMyDoc::classCMyDoc)
+			|->m_pFrameClass (保存了&CMyFrameWnd::classCMyFrameWnd)
+			|->m_pViewClass (保存了&CMyView::classCMyView)
+			|->m_pOnlyDoc   (保存了文档类对象地址)
+
+OnFileNew执行过程
+	1,通过theApp获取文档管理类对象地址m_pDocManager
+	2,通过m_pDocManager获取保存在m_templateList链表中的单文档模板类对象地址
+	3,利用保存在单文档模板类对象中的m_pDocClass来创建文档类对象
+	3,利用保存在单文档类模板类对象中的m_pFrameClass来动态创建框架类对象。
+	3,利用框架类对象调用LoadFrame函数创建框架类窗口
+	4,利用框架窗口的WM_CREATE消息处理动态创建视图类对象并创建视图窗口
+	5,在视图类窗口WM_CREATE消息处理中将视图类对象和文档类对象进行关联
+
+CWinApp::PreTranslateMessage 处理加速键需重写这个函数
+除应用程序类自己定义,其他类都有MFC动态创建
+
+伪代码：
+	CMyFrameWnd *pFrame=new CMyFrameWnd();
+	CCreateContext cct;
+	cct.m_pCurrentDoc=new CMyDocument();
+	cct.m_pNewViewClass=RUNTIME_CLASS(CMyView);
+	pFrame->LoadFrame(...,&cct);{	//函数内部this指针为pFrame
+		Create(...,&cct){  //this=pFrame
+			CreateEx(...,&cct){
+				CREATESTRUCT cs;
+				cs.lpCreateParams=&cct;
+				.....
+				::CreateWindow(...,&cct);	
+				//窗口创建  触发框架窗口的WM_CREATE lParam获取cct
+			}
+		}
+	}
+
+	
+伪代码:
+	OnFileNew(){	//this=theApp;
+		m_pDocManager->OnFileNew();{
+		//this=m_pDocManager文档管理类对象
+			CDocTemplate* pTemplate = (CDocTemplate*)m_templateList.GetHead();
+			//重新获取存放在单文档模板类对象pTemplate的地址
+			pTemplate->OpenDocumentFile(NULL);{
+			//this=pTemplate this指针为自己new的单文档类地址
+				pDocument = CreateNewDocument();{
+				//this=pTemplate 单文档模板类对象地址
+					CDocument* pDocument = 
+					(CDocument*)m_pDocClass->CreateObject();
+					//动态创建文档类对象地址
+					pFrame = CreateNewFrame(pDocument, NULL);{
+					//动态创建框架类对象 this=pTemplate
+						CCreateContext context;	//cct
+						context.m_pCurrentFrame = pOther;
+						context.m_pCurrentDoc = pDoc;
+						context.m_pNewViewClass = m_pViewClass;
+						context.m_pNewDocTemplate = this;
+						CFrameWnd* pFrame = 
+						(CFrameWnd*)m_pFrameClass->CreateObject();
+						//动态创建框架类对象 pFrame
+						pFrame->LoadFrame(m_nIDResource,
+				WS_OVERLAPPEDWINDOW | FWS_ADDTOTITLE,   // default frame styles
+				NULL, &context)//context-->cct 实现文档 视图类对象的关联
+
+					}
+				}
+			}
+		}
+	}
+
+*****************************************************************
+视图窗口WM_CREATE
+CEditView::OnCreate(lpCreateStruct){
+	//函数内部this指针为pView(动态创建的视图类对象)
+	//参数为CreateWindowEx函数的12个参数  最后一个cct
+	CCtrlView::OnCreate(lpCreateStruct){
+		CCreateContext* pContext = (CCreateContext*)lpcs->lpCreateParams;
+		//获取&cct
+		pContext->m_pCurrentDoc->AddView(this);{	//this==pView
+			//函数内部this指针为文档类指针.参数为pView
+			m_viewList.AddTail(pView);
+			//将视图类对象地址保存在文档类的一个链表成员中
+			pView->m_pDocument = this;
+			//将文档类对子昂地址保存在视图类指针成员中。
+		****	一个文档类对象课对应多个视图  比如多个窗口以不同的方式显示数据***
+		一个视图对应一个文档
+
+		视图类 用一个指针保存和他关联的文档类对象,
+		所以一个视图类对象只能对应一个文档类对象
+
+		文档类 用一个链表保存和他关联的视图类对象，所以一个文档类对象可以对应多个
+		视图类对象。
+		}
+	}
+
+}
+
+
+WM_CREATE的lParam为CreateWindowEx的12个参数
+*****************************************************************
+框架窗口的WM_CREATE消息处理		mfc----->win32
+CframeWnd::OnCreate(lpCreateStruct){
+	//函数内部this指针为pFrame,参数为CreateWindowEx的12个参数
+	CCreateContext* pContext = (CCreateContext*)lpcs->lpCreateParams;
+	//获取了CreateWindowEx的最后一个参数cct==>pContext
+	OnCreateHelper(...,pContext){
+		//this==pFrame,pContext==&cct
+		OnCreateClient(lpcs, pContext){
+			//this==pFrame,pContext==&cct;
+			CreateView(pContext, AFX_IDW_PANE_FIRST){
+				//this==pFrame,pContext==&cct;
+				CWnd* pView = 
+				(CWnd*)pContext->m_pNewViewClass->CreateObject();
+				//动态创建视图类对象,并获取对象地址(pView)
+				pView->Create(NULL, NULL, AFX_WS_DEFAULT_VIEW,
+		CRect(0,0,0,0), this, nID, pContext)   //函数内部this为pView,pContext==cct
+				CreateEx(0, lpszClassName, lpszWindowName,
+				dwStyle | WS_CHILD,
+				rect.left, rect.top,
+				rect.right - rect.left, rect.bottom - rect.top,
+				pParentWnd->GetSafeHwnd(), (HMENU)nID, (LPVOID)pContext);{
+					CREATESTRUCT cs;
+					....
+					::CreateWindowEx(...,&cct)
+					//将出发视图窗口的WM_CREATE消息
+					//将文档类对象和视图类对象进行关联
+				}
+			}
+		}
+	}
+}
+
+
+
+BOOL CFrameWnd::OnCmdMsg(UINT nID, int nCode, void* pExtra,
+	AFX_CMDHANDLERINFO* pHandlerInfo)
+
+BOOL CView::OnCmdMsg(UINT nID, int nCode, void* pExtra,
+	AFX_CMDHANDLERINFO* pHandlerInfo)
+{
+	// first pump through pane
+	if (CWnd::OnCmdMsg(nID, nCode, pExtra, pHandlerInfo))
+		return TRUE;
+
+	// then pump through document
+	if (m_pDocument != NULL)	//视图类成员,保存文档类对象.
+	{
+		// special state for saving view before routing to document
+		CPushRoutingView push(this);
+		return m_pDocument->OnCmdMsg(nID, nCode, pExtra, pHandlerInfo);
+	}
+
+	return FALSE;
+}
+
+
+BOOL CCmdTarget::OnCmdMsg(UINT nID, int nCode, void* pExtra,
+	AFX_CMDHANDLERINFO* pHandlerInfo)
+{
+#ifndef _AFX_NO_OCC_SUPPORT
+	// OLE control events are a special case
+	if (nCode == CN_EVENT)
+	{
+		ASSERT(afxOccManager != NULL);
+		return afxOccManager->OnEvent(this, nID, (AFX_EVENT*)pExtra, pHandlerInfo);
+	}
+#endif // !_AFX_NO_OCC_SUPPORT
+
+	// determine the message number and code (packed into nCode)
+	const AFX_MSGMAP* pMessageMap;
+	const AFX_MSGMAP_ENTRY* lpEntry;
+	UINT nMsg = 0;
+
+#ifndef _AFX_NO_DOCOBJECT_SUPPORT
+	if (nCode == CN_OLECOMMAND)
+	{
+		BOOL bResult = FALSE;
+
+		const AFX_OLECMDMAP* pOleCommandMap;
+		const AFX_OLECMDMAP_ENTRY* pEntry;
+
+		COleCmdUI* pUI = (COleCmdUI*) pExtra;
+		const GUID* pguidCmdGroup = pUI->m_pguidCmdGroup;
+
+#ifdef _AFXDLL
+		for (pOleCommandMap = GetCommandMap(); pOleCommandMap != NULL && !bResult;
+			pOleCommandMap = pOleCommandMap->pfnGetBaseMap())
+#else
+		for (pOleCommandMap = GetCommandMap(); pOleCommandMap != NULL && !bResult;
+			pOleCommandMap = pOleCommandMap->pBaseMap)
+#endif
+		{
+			for (pEntry = pOleCommandMap->lpEntries;
+				pEntry->cmdID != 0 && pEntry->nID != 0 && !bResult;
+				pEntry++)
+			{
+				if (nID == pEntry->cmdID &&
+					IsEqualNULLGuid(pguidCmdGroup, pEntry->pguid))
+				{
+					pUI->m_nID = pEntry->nID;
+					bResult = TRUE;
+				}
+			}
+		}
+
+		return bResult;
+	}
+#endif
+
+	if (nCode != CN_UPDATE_COMMAND_UI)
+	{
+		nMsg = HIWORD(nCode);
+		nCode = LOWORD(nCode);
+	}
+
+	// for backward compatibility HIWORD(nCode)==0 is WM_COMMAND
+	if (nMsg == 0)
+		nMsg = WM_COMMAND;
+
+	// look through message map to see if it applies to us
+#ifdef _AFXDLL
+	for (pMessageMap = GetMessageMap(); pMessageMap != NULL;
+	  pMessageMap = (*pMessageMap->pfnGetBaseMap)())
+#else
+	for (pMessageMap = GetMessageMap(); pMessageMap != NULL;
+	  pMessageMap = pMessageMap->pBaseMap)
+#endif
+	{
+		// Note: catches BEGIN_MESSAGE_MAP(CMyClass, CMyClass)!
+#ifdef _AFXDLL
+		ASSERT(pMessageMap != (*pMessageMap->pfnGetBaseMap)());
+#else
+		ASSERT(pMessageMap != pMessageMap->pBaseMap);
+#endif
+
+		lpEntry = AfxFindMessageEntry(pMessageMap->lpEntries, nMsg, nCode, nID);
+		if (lpEntry != NULL)
+		{
+			// found it
+#ifdef _DEBUG
+			if (afxTraceFlags & traceCmdRouting)
+			{
+				if (nCode == CN_COMMAND)
+				{
+					TRACE2("SENDING command id 0x%04X to %hs target.\n", nID,
+						GetRuntimeClass()->m_lpszClassName);
+				}
+				else if (nCode > CN_COMMAND)
+				{
+					if (afxTraceFlags & traceWinMsg)
+					{
+						TRACE3("SENDING control notification %d from control id 0x%04X to %hs window.\n",
+							nCode, nID, GetRuntimeClass()->m_lpszClassName);
+					}
+				}
+			}
+#endif //_DEBUG
+			return _AfxDispatchCmdMsg(this, nID, nCode,
+				lpEntry->pfn, pExtra, lpEntry->nSig, pHandlerInfo);
+		}
+	}
+	return FALSE;   // not handled
+}
+********************************************
+CMyDocument::OnNew() line 15	//菜单消息调用过程
+_AfxDispatchCmdMsg(CCmdTarget * 0x02813ec0 {CMyDocument}, unsigned int 40001, int 0, void (void)* 0x00401087 CMyDocument::OnNew(void), void * 0x00000000, unsigned int 12, AFX_CMDHANDLERINFO * 0x00000000) line 88
+CCmdTarget::OnCmdMsg(unsigned int 40001, int 0, void * 0x00000000, AFX_CMDHANDLERINFO * 0x00000000) line 302 + 39 bytes
+CDocument::OnCmdMsg(unsigned int 40001, int 0, void * 0x00000000, AFX_CMDHANDLERINFO * 0x00000000) line 894 + 24 bytes
+CView::OnCmdMsg(unsigned int 40001, int 0, void * 0x00000000, AFX_CMDHANDLERINFO * 0x00000000) line 170 + 33 bytes
+CFrameWnd::OnCmdMsg(unsigned int 40001, int 0, void * 0x00000000, AFX_CMDHANDLERINFO * 0x00000000) line 894 + 33 bytes
+CWnd::OnCommand(unsigned int 40001, long 0) line 2099
+CFrameWnd::OnCommand(unsigned int 40001, long 0) line 321
+CWnd::OnWndMsg(unsigned int 273, unsigned int 40001, long 0, long * 0x0018fcbc) line 1608 + 28 bytes
+CWnd::WindowProc(unsigned int 273, unsigned int 40001, long 0) line 1596 + 30 bytes
+AfxCallWndProc(CWnd * 0x02813dc8 {CMyFrameWnd hWnd=???}, HWND__ * 0x006805d0, unsigned int 273, unsigned int 40001, long 0) line 215 + 26 bytes
+AfxWndProc(HWND__ * 0x006805d0, unsigned int 273, unsigned int 40001, long 0) line 379
+USER32! 756062fa()
+USER32! 75606d3a()
+USER32! 756077c4()
+USER32! 75607bca()
+CWinThread::PumpMessage() line 853
+CWinThread::Run() line 487 + 11 bytes
+CWinApp::Run() line 400
+AfxWinMain(HINSTANCE__ * 0x00400000, HINSTANCE__ * 0x00000000, char * 0x009a58ce, int 1) line 49 + 11 bytes
+WinMain(HINSTANCE__ * 0x00400000, HINSTANCE__ * 0x00000000, char * 0x009a58ce, int 1) line 30
+WinMainCRTStartup() line 198 + 54 bytes
+KERNEL32! 76b333ca()
+NTDLL! 775d9ed2()
+NTDLL! 775d9ea5()
+
+********************************************
+
+int CFrameWnd::OnCreate(LPCREATESTRUCT lpcs)
+{
+	CCreateContext* pContext = (CCreateContext*)lpcs->lpCreateParams; ---->//&cct
+	return OnCreateHelper(lpcs, pContext);
+}
+
+
+int CFrameWnd::OnCreateHelper(LPCREATESTRUCT lpcs, CCreateContext* pContext)
+{
+	if (CWnd::OnCreate(lpcs) == -1)
+		return -1;
+
+	// create special children first
+	if (!OnCreateClient(lpcs, pContext))
+	{
+		TRACE0("Failed to create client pane/view for frame.\n");
+		return -1;
+	}
+
+	// post message for initial message string
+	PostMessage(WM_SETMESSAGESTRING, AFX_IDS_IDLEMESSAGE);
+
+	// make sure the child windows have been properly sized
+	RecalcLayout();
+
+	return 0;   // create ok
+}
+
+
+BOOL CFrameWnd::OnCreateClient(LPCREATESTRUCT, CCreateContext* pContext)
+{
+	// default create client will create a view if asked for it
+	if (pContext != NULL && pContext->m_pNewViewClass != NULL)
+	{
+		if (CreateView(pContext, AFX_IDW_PANE_FIRST) == NULL)
+			return FALSE;
+	}
+	return TRUE;
+}
+
+
+CWnd* CFrameWnd::CreateView(CCreateContext* pContext, UINT nID)
+{
+	ASSERT(m_hWnd != NULL);
+	ASSERT(::IsWindow(m_hWnd));
+	ASSERT(pContext != NULL);
+	ASSERT(pContext->m_pNewViewClass != NULL);
+
+	// Note: can be a CWnd with PostNcDestroy self cleanup
+	CWnd* pView = (CWnd*)pContext->m_pNewViewClass->CreateObject(); //m_pNewViewClass=CView
+	if (pView == NULL)
+	{
+		TRACE1("Warning: Dynamic create of view type %hs failed.\n",
+			pContext->m_pNewViewClass->m_lpszClassName);
+		return NULL;
+	}
+	ASSERT_KINDOF(CWnd, pView);
+
+	// views are always created with a border!
+	if (!pView->Create(NULL, NULL, AFX_WS_DEFAULT_VIEW,
+		CRect(0,0,0,0), this, nID, pContext))
+	{
+		TRACE0("Warning: could not create view for frame.\n");
+		return NULL;        // can't continue without a view
+	}
+
+	if (afxData.bWin4 && (pView->GetExStyle() & WS_EX_CLIENTEDGE))
+	{
+		// remove the 3d style from the frame, since the view is
+		//  providing it.
+		// make sure to recalc the non-client area
+		ModifyStyleEx(WS_EX_CLIENTEDGE, 0, SWP_FRAMECHANGED);
+	}
+	return pView;
+}
+
+BOOL CWnd::Create(LPCTSTR lpszClassName,
+	LPCTSTR lpszWindowName, DWORD dwStyle,
+	const RECT& rect,
+	CWnd* pParentWnd, UINT nID,
+	CCreateContext* pContext)
+{
+	// can't use for desktop or pop-up windows (use CreateEx instead)
+	ASSERT(pParentWnd != NULL);
+	ASSERT((dwStyle & WS_POPUP) == 0);
+
+	return CreateEx(0, lpszClassName, lpszWindowName,
+		dwStyle | WS_CHILD,
+		rect.left, rect.top,
+		rect.right - rect.left, rect.bottom - rect.top,
+		pParentWnd->GetSafeHwnd(), (HMENU)nID, (LPVOID)pContext);
+}
+
+
+
+
+
+BOOL CFrameWnd::LoadFrame(UINT nIDResource, DWORD dwDefaultStyle,
+	CWnd* pParentWnd, CCreateContext* pContext)
+{
+	// only do this once
+	ASSERT_VALID_IDR(nIDResource);
+	ASSERT(m_nIDHelp == 0 || m_nIDHelp == nIDResource);
+
+	m_nIDHelp = nIDResource;    // ID for help context (+HID_BASE_RESOURCE)
+
+	CString strFullString;
+	if (strFullString.LoadString(nIDResource))
+		AfxExtractSubString(m_strTitle, strFullString, 0);    // first sub-string
+
+	VERIFY(AfxDeferRegisterClass(AFX_WNDFRAMEORVIEW_REG));
+
+	// attempt to create the window
+	LPCTSTR lpszClass = GetIconWndClass(dwDefaultStyle, nIDResource);
+	LPCTSTR lpszTitle = m_strTitle;
+	if (!Create(lpszClass, lpszTitle, dwDefaultStyle, rectDefault,
+	  pParentWnd, MAKEINTRESOURCE(nIDResource), 0L, pContext))
+	{
+		return FALSE;   // will self destruct on failure normally
+	}
+
+	// save the default menu handle
+	ASSERT(m_hWnd != NULL);
+	m_hMenuDefault = ::GetMenu(m_hWnd);
+
+	// load accelerator resource
+	LoadAccelTable(MAKEINTRESOURCE(nIDResource));
+
+	if (pContext == NULL)   // send initial update
+		SendMessageToDescendants(WM_INITIALUPDATE, 0, 0, TRUE, TRUE);
+
+	return TRUE;
+}
+
+
+BOOL CFrameWnd::Create(LPCTSTR lpszClassName,
+	LPCTSTR lpszWindowName,
+	DWORD dwStyle,
+	const RECT& rect,
+	CWnd* pParentWnd,
+	LPCTSTR lpszMenuName,
+	DWORD dwExStyle,
+	CCreateContext* pContext)
+{
+	HMENU hMenu = NULL;
+	if (lpszMenuName != NULL)
+	{
+		// load in a menu that will get destroyed when window gets destroyed
+		HINSTANCE hInst = AfxFindResourceHandle(lpszMenuName, RT_MENU);
+		if ((hMenu = ::LoadMenu(hInst, lpszMenuName)) == NULL)
+		{
+			TRACE0("Warning: failed to load menu for CFrameWnd.\n");
+			PostNcDestroy();            // perhaps delete the C++ object
+			return FALSE;
+		}
+	}
+
+	m_strTitle = lpszWindowName;    // save title for later
+
+	if (!CreateEx(dwExStyle, lpszClassName, lpszWindowName, dwStyle,
+		rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
+		pParentWnd->GetSafeHwnd(), hMenu, (LPVOID)pContext))
+	{
+		TRACE0("Warning: failed to create CFrameWnd.\n");
+		if (hMenu != NULL)
+			DestroyMenu(hMenu);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+******************************************************
+int CEditView::OnCreate(LPCREATESTRUCT lpcs)
+{
+	if (CCtrlView::OnCreate(lpcs) != 0)
+		return -1;
+
+#ifdef _UNICODE
+	AfxLockGlobals(CRIT_EDITVIEW);
+	if (_afxUnicodeFont == NULL)
+	{
+		// get unicode font same size as system font
+		HFONT hSystemFont = (HFONT)GetStockObject(SYSTEM_FONT);
+		LOGFONT systemFont;
+		VERIFY(::GetObject(hSystemFont, sizeof(LOGFONT), (void*)&systemFont));
+
+		// default size and facename, but allow customization
+		LOGFONT logFont; memset(&logFont, 0, sizeof(LOGFONT));
+		logFont.lfHeight = systemFont.lfHeight;
+		logFont.lfWeight = systemFont.lfWeight;
+		logFont.lfCharSet = DEFAULT_CHARSET;
+		lstrcpy(logFont.lfFaceName, _T("Lucida Sans Unicode"));
+		AfxCustomLogFont(AFX_IDS_UNICODE_FONT, &logFont);
+
+		// attempt to create the font
+		_afxUnicodeFont = ::CreateFontIndirect(&logFont);
+		if (_afxUnicodeFont == NULL)
+			TRACE1("Unable to create unicode font '%s'.\n", logFont.lfFaceName);
+	}
+	AfxUnlockGlobals(CRIT_EDITVIEW);
+	// set unicode font instead of using system font
+	if (_afxUnicodeFont != NULL)
+		SendMessage(WM_SETFONT, (WPARAM)_afxUnicodeFont);
+#endif
+
+	GetEditCtrl().LimitText(nMaxSize);
+	GetEditCtrl().SetTabStops(m_nTabStops);
+
+	return 0;
+}
+
+
+int CView::OnCreate(LPCREATESTRUCT lpcs)
+{
+	if (CWnd::OnCreate(lpcs) == -1)
+		return -1;
+
+	// if ok, wire in the current document
+	ASSERT(m_pDocument == NULL);
+	CCreateContext* pContext = (CCreateContext*)lpcs->lpCreateParams;
+
+	// A view should be created in a given context!
+	if (pContext != NULL && pContext->m_pCurrentDoc != NULL)
+	{
+		pContext->m_pCurrentDoc->AddView(this);
+		ASSERT(m_pDocument != NULL);
+	}
+	else
+	{
+		TRACE0("Warning: Creating a pane with no CDocument.\n");
+	}
+
+	return 0;   // ok
+}
+
+void CDocument::AddView(CView* pView)
+{
+	ASSERT_VALID(pView);
+	ASSERT(pView->m_pDocument == NULL); // must not be already attached
+	ASSERT(m_viewList.Find(pView, NULL) == NULL);   // must not be in list
+
+	m_viewList.AddTail(pView);
+	ASSERT(pView->m_pDocument == NULL); // must be un-attached
+	pView->m_pDocument = this;
+
+	OnChangedViewList();    // must be the last thing done to the document
+}

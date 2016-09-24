@@ -1,0 +1,287 @@
+一MFC菜单
+1 菜单的相关问题
+	win32--HMENU
+	MFC----CMenu类对象-->实为菜单句柄的映射
+		CMenu类封装了操作菜单的各种API函数
+		封装了一个成员CMenu::m_hMenu保存菜单句柄
+2.菜单使用
+	1.添加菜单资源
+	2.将菜单设置到窗口
+		1)在框架类窗口的WM_CREATE消息中
+		CMenu menu;
+		menu.LoadMenu
+		CFrameWnd::SetMenu  --将菜单设置到窗口
+		
+		2)在CFrameWnd::Create参数设置菜单
+
+	3.菜单项消息(WM_COMMAND)的处理
+	Frame处理则App不处理	Frame优先于App处理,由CFrameWnd::OnCmdMsg内部代码执行先后顺序决定
+	4.设置菜单状态
+		ON_WM_INITMENUPOPUP
+			CheckMenuItem	EnableMenuItem
+3.右键菜单
+	ON_WM_CONTEXTMENU
+	CMenu::GetSubMenu获得某个顶层菜单的下拉菜单
+
+*****windows标准消息,使用频繁,一般为ON_WM_XXX()宏
+二工具栏
+	1,工具栏相关类
+	CToolbarCtrl  --父类为CWnd,封装了对ToolbarCtrl的各种操作的API函数.
+	CFrameWnd相当于一个容器,内部包含各种窗口.    子窗口,停靠关系,
+	CToolbar -父类为CControlBar,封装了工具栏和框架窗口之间的关系,还包括工具栏的创建
+
+	2.工具栏的使用
+		1.添加工具栏资源
+		2.创建工具栏  CToolbar::Create/CreateEx
+		3.加载工具栏资源 CToolbar::LoadToolBar
+		4.工具栏的停靠。
+			设置工具栏要停靠的位置
+			CToolBar::EnableDocking
+			框架窗口允许停靠的位置
+			CFrameWnd::EnableDocking
+			工具栏可以停靠的位置
+			CframeWnd::DockToolBar
+		5.工具栏的膳食与隐藏
+		CFrameWnd::ShowControlBar
+	void CFrameWnd::ShowControlBar( CControlBar* pBar, BOOL bShow, BOOL bDelay );	//bDelay现在已经不起作用
+	CWnd::IsWindowVisible --判断窗口是否是显示状态    判断任意窗口
+
+
+窗口工具栏的风格
+	
+	CBRS_SIZE_DYNAMIC --可以更改工具栏的形状
+	CBRS_TOOLTIPS   --变迁提示风格
+	CBRS_GRIPPER	--夹子/把手
+	TBSTYLE_FLAT	--工具栏按钮  平滑风格
+	TBSTYLE_TRANSPARENT   --工具栏按钮  突起风格
+
+状态栏	
+	相关的类
+	CStatusBarCtrl   -父类 CWnd,  封装了 statusBarCtrl操作的各种API函数
+	CStatusBar	--父类CControlBar,封装了状态栏和主框架窗口之间的关系，包括状态栏的创建。
+
+	使用:
+	创建状态栏:
+	CStatusBar::Create/CreateEx	
+	设置状态栏指示器
+	CStatusBar::SetIndicators
+	设置指示器的宽度和风格
+	CStatusBar::SetPaneInfo
+	设置指示器的内容
+	CStatusBar::SetPaneText	
+
+***************************************************************
+void EnableDocking( 
+DWORD dwStyle ); 
+
+Specifies whether the control bar supports docking and the sides of its parent window to which the control bar can be docked, if supported. Can be one or more of the following flags: 
+CBRS_ALIGN_TOP   Allows docking at the top of the client area. 
+CBRS_ALIGN_BOTTOM   Allows docking at the bottom of the client area. 
+CBRS_ALIGN_LEFT   Allows docking on the left side of the client area. 
+CBRS_ALIGN_RIGHT   Allows docking on the right side of the client area. 
+CBRS_ALIGN_ANY   Allows docking on any side of the client area. 
+CBRS_FLOAT_MULTI   Allows multiple control bars to be floated in a single mini-frame window. 
+If zero, that is, indicating no flags, the control bar does not dock. 
+
+void DockControlBar( CControlBar * pBar, UINT nDockBarID = 0, LPCRECT lpRect = NULL );
+
+Parameters
+
+pBar
+
+Points to the control bar to be docked.
+
+nDockBarID
+
+Determines which sides of the frame window to consider for docking. It can be 0, or one or more of the following: 
+
+AFX_IDW_DOCKBAR_TOP   Dock to the top side of the frame window.
+
+
+AFX_IDW_DOCKBAR_BOTTOM   Dock to the bottom side of the frame window.
+
+
+AFX_IDW_DOCKBAR_LEFT   Dock to the left side of the frame window.
+
+
+AFX_IDW_DOCKBAR_RIGHT   Dock to the right side of the frame window.
+If 0, the control bar can be docked to any side enabled for docking in the destination frame window.
+
+lpRect
+
+Determines, in screen coordinates, where the control bar will be docked in the nonclient area of the destination frame window.
+
+CFrameWnd::ShowControlBar
+void ShowControlBar( CControlBar* pBar, BOOL bShow, BOOL bDelay );
+
+Parameters
+
+pBar
+
+Pointer to the control bar to be shown or hidden.
+
+bShow
+
+If TRUE, specifies that the control bar is to be shown. If FALSE, specifies that the control bar is to be hidden.
+
+bDelay
+
+If TRUE, delay showing the control bar. If FALSE, show the control bar immediately.
+
+void SetPaneInfo( 
+int nIndex, 
+UINT nID, 
+UINT nStyle, 
+int cxWidth ); 
+
+BOOL SetPaneText( 
+int nIndex, 
+LPCTSTR lpszNewText, 
+BOOL bUpdate = TRUE ); 
+
+***************************************************************
+ON_WM_INITMENUPOPUP( ) afx_msg void OnInitMenuPopup( CMenu *, UINT, BOOL ); 
+
+#define ON_WM_INITMENUPOPUP() \
+	{ WM_INITMENUPOPUP, 0, 0, 0, AfxSig_vMwb, \
+		(AFX_PMSG)(AFX_PMSGW)(void (AFX_MSG_CALL CWnd::*)(CMenu*, UINT, BOOL))&OnInitMenuPopup },
+***************************************************************
+_AFXWIN_INLINE BOOL CMenu::LoadMenu(UINT nIDResource)
+	{ return Attach(::LoadMenu(AfxFindResourceHandle(
+		MAKEINTRESOURCE(nIDResource), RT_MENU), MAKEINTRESOURCE(nIDResource))); }
+
+_AFXWIN_INLINE HINSTANCE AFXAPI AfxGetResourceHandle()
+	{ ASSERT(afxCurrentResourceHandle != NULL);
+		return afxCurrentResourceHandle; }
+
+AFX_MODULE_STATE* AFXAPI AfxGetModuleState()
+{
+	_AFX_THREAD_STATE* pState = _afxThreadState;
+	AFX_MODULE_STATE* pResult;
+	if (pState->m_pModuleState != NULL)
+	{
+		// thread state's module state serves as override
+		pResult = pState->m_pModuleState;
+	}
+	else
+	{
+		// otherwise, use global app state
+		pResult = _afxBaseModuleState.GetData();
+	}
+	ASSERT(pResult != NULL);
+	return pResult;
+}
+&&&&&
+BOOL CMenu::Attach(HMENU hMenu)
+{
+	ASSERT(m_hMenu == NULL);        // only attach once, detach on destroy
+	if (hMenu == NULL)
+		return FALSE;
+	CHandleMap* pMap = afxMapHMENU(TRUE); // create map if not exist
+	ASSERT(pMap != NULL);
+	pMap->SetPermanent(m_hMenu = hMenu, this);   //this=menu
+	return TRUE;
+}
+&&&&&
+CHandleMap* PASCAL afxMapHMENU(BOOL bCreate)
+{
+	AFX_MODULE_THREAD_STATE* pState = AfxGetModuleThreadState();
+	if (pState->m_pmapHMENU == NULL && bCreate)
+	{
+		BOOL bEnable = AfxEnableMemoryTracking(FALSE);
+#ifndef _AFX_PORTABLE
+		_PNH pnhOldHandler = AfxSetNewHandler(&AfxCriticalNewHandler);
+#endif
+		pState->m_pmapHMENU = new CHandleMap(RUNTIME_CLASS(CTempMenu),
+			offsetof(CMenu, m_hMenu)),	//此句并未执行,仍用先前绑定窗口时的map
+
+#ifndef _AFX_PORTABLE
+		AfxSetNewHandler(pnhOldHandler);
+#endif
+		AfxEnableMemoryTracking(bEnable);
+	}
+	return pState->m_pmapHMENU;
+}
+
+void CHandleMap::SetPermanent(HANDLE h, CObject* permOb)
+{
+	BOOL bEnable = AfxEnableMemoryTracking(FALSE);
+	m_permanentMap[(LPVOID)h] = permOb;
+	AfxEnableMemoryTracking(bEnable);
+}
+
+
+BOOL CFrameWnd::Create(LPCTSTR lpszClassName,
+	LPCTSTR lpszWindowName,
+	DWORD dwStyle,
+	const RECT& rect,
+	CWnd* pParentWnd,
+	LPCTSTR lpszMenuName,
+	DWORD dwExStyle,
+	CCreateContext* pContext)
+{
+	HMENU hMenu = NULL;
+	if (lpszMenuName != NULL)
+	{
+		// load in a menu that will get destroyed when window gets destroyed
+		HINSTANCE hInst = AfxFindResourceHandle(lpszMenuName, RT_MENU);
+		if ((hMenu = ::LoadMenu(hInst, lpszMenuName)) == NULL)
+		{
+			TRACE0("Warning: failed to load menu for CFrameWnd.\n");
+			PostNcDestroy();            // perhaps delete the C++ object
+			return FALSE;
+		}
+	}
+
+	m_strTitle = lpszWindowName;    // save title for later
+
+	if (!CreateEx(dwExStyle, lpszClassName, lpszWindowName, dwStyle,
+		rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
+		pParentWnd->GetSafeHwnd(), hMenu, (LPVOID)pContext))
+	{
+		TRACE0("Warning: failed to create CFrameWnd.\n");
+		if (hMenu != NULL)
+			DestroyMenu(hMenu);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+void CFrameWnd::PostNcDestroy()
+{
+	// default for frame windows is to allocate them on the heap
+	//  the default post-cleanup is to 'delete this'.
+	// never explicitly call 'delete' on a CFrameWnd, use DestroyWindow instead
+	delete this;
+}
+
+_AFXWIN_INLINE HWND CWnd::GetSafeHwnd() const
+	{ return this == NULL ? NULL : m_hWnd; }
+
+///********************
+CMyWinApp::OnNew() line 44
+_AfxDispatchCmdMsg(CCmdTarget * 0x00531c88 class CMyWinApp theApp, unsigned int 40001, int 0, void (void)* 0x00401046 CMyWinApp::OnNew(void), void * 0x00000000, unsigned int 12, AFX_CMDHANDLERINFO * 0x00000000) line 88
+CCmdTarget::OnCmdMsg(unsigned int 40001, int 0, void * 0x00000000, AFX_CMDHANDLERINFO * 0x00000000) line 302 + 39 bytes
+CFrameWnd::OnCmdMsg(unsigned int 40001, int 0, void * 0x00000000, AFX_CMDHANDLERINFO * 0x00000000) line 903 + 33 bytes
+CWnd::OnCommand(unsigned int 40001, long 0) line 2099
+CFrameWnd::OnCommand(unsigned int 40001, long 0) line 321
+CWnd::OnWndMsg(unsigned int 273, unsigned int 40001, long 0, long * 0x0018fcbc) line 1608 + 28 bytes
+CWnd::WindowProc(unsigned int 273, unsigned int 40001, long 0) line 1596 + 30 bytes
+AfxCallWndProc(CWnd * 0x02673da8 {CMyFrameWnd hWnd=???}, HWND__ * 0x00010c6a, unsigned int 273, unsigned int 40001, long 0) line 215 + 26 bytes
+AfxWndProc(HWND__ * 0x00010c6a, unsigned int 273, unsigned int 40001, long 0) line 379
+USER32! 75e162fa()
+USER32! 75e16d3a()
+USER32! 75e177c4()
+USER32! 75e17bca()
+CWinThread::PumpMessage() line 853
+CWinThread::Run() line 487 + 11 bytes
+CWinApp::Run() line 400
+AfxWinMain(HINSTANCE__ * 0x00400000, HINSTANCE__ * 0x00000000, char * 0x0069588e, int 1) line 49 + 11 bytes
+WinMain(HINSTANCE__ * 0x00400000, HINSTANCE__ * 0x00000000, char * 0x0069588e, int 1) line 30
+WinMainCRTStartup() line 198 + 54 bytes
+KERNEL32! 761233ca()
+NTDLL! 77319ed2()
+NTDLL! 77319ea5()
+
+*****************************///

@@ -1,0 +1,4 @@
+LIBRARY	DllInterface
+	
+EXPORTS
+	CreateInstance @1

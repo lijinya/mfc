@@ -1,0 +1,716 @@
+第二大机制		::::真正实现功能的都是windows API
+窗口创建
+	1)加载菜单
+	2)调用PreCreateWindow设计并注册窗口类。内部调用afxDeferRegisterClass()设计窗口类
+	WNDCLASS wndcls;
+	wndcls.lpfnWndProc = DefWindowProc;	//
+	.....
+	调用_AfxRegisterClassWithIcon内部调用AfxRegisterClass内部调用windowsAPI函数
+	::RegisterClass注册窗口类
+	3)调用AfxHookWindowCreate
+		0)将自己new的框架类地址(pFrame)保存到当前程序线程信息中
+		1)windows API函数调用SetWindowsHookEx在程序埋下一个类型为
+		  WH_CBT的钩子,一旦CreateWindowEx函数执行成功,就调用钩子处理函数
+		  _AfxCbtFilterHook
+	4)执行windows API函数CreateWindowEx创建窗口。钩子将WM_CREATE消息钩到_AfxCbtFilterHook
+	5)调用钩子处理函数将窗口句柄(hWnd)将框架类对象地址(pFrame)进行映射。
+	6)调用windows API函数SetWindowLong将窗口函数更改为AfxWndProc(正真的窗口处理函数)
+
+
+
+消息处理:
+	调用CWnd::FromHandlePermanent函数找到和窗口句柄绑定在一起的类对象(pFrame)
+	利用找到的对象调用WindowProc(虚函数)实现消息的处理
+	如果重写则调用自己重写的
+	如果没有则调用基类的(消息映射机制)
+
+
+CMyFrameWnd *pFrame=new CMyFrameWnd();
+_AFX_THREAD_STATE* pThreadState = _afxThreadState.GetData();
+_AFX_THREAD_STATE* ccc	当前程序线程信息  第三个全局变量
+
+pFrame->Create(NULL,"MFCCreate");{		//this为pFrame
+	加载菜单::LoadMenu(hInst, lpszMenuName)
+	this->CreateEx(dwExStyle, lpszClassName,....)   ///函数内部this指针为pFrame
+	CREATESTRUCT cs;
+	cs.lpszName = lpszWindowName;
+	cs.lpszClass = lpszClassName;	//cs.lpszClass=NULL	后面重新赋值//不能为空
+	cs.hInstance = AfxGetInstanceHandle();			//获取句柄
+	PreCreateWindow(cs){	//pFrame->	//创建窗口之前，更改lpszClass，注册窗口
+		if (cs.lpszClass == NULL)
+		{
+			VERIFY(AfxDeferRegisterClass(AFX_WNDFRAMEORVIEW_REG));
+			cs.lpszClass = _afxWndFrameOrView;  // COLOR_WINDOW background
+			cs.lpszClass = "AfxFrameOrView42sd"  //真正注册的窗口类名
+		}
+		AfxDeferRegisterClass(...){	//注册，赋值
+			WNDCLASS wndcls;
+			memset(&wndcls, 0, sizeof(WNDCLASS));   // start with NULL defaults
+			wndcls.lpfnWndProc = DefWindowProc;	//后面重新赋值
+	
+			//缺省窗口处理函数，无法退出
+		//cs.lpszClass=""赋值
+		if (_AfxRegisterWithIcon(&wndcls, _afxWndFrameOrView, AFX_IDI_STD_FRAME))
+			fRegisteredClasses |= AFX_WNDFRAMEORVIEW_REG;
+			
+			AfxRegisterClass(pWndCls);
+			AfxHookWindowCreate(pFrame){
+				_AFX_THREAD_STATE* pThreadState = _afxThreadState.GetData();
+				::SetWindowsHookEx(WH_CBT,	//用win32函数埋下钩子
+				_AfxCbtFilterHook, NULL, ::GetCurrentThreadId());
+				pThreadState->m_pWndInit = pWnd;	//pFrame保存在全局变量CCC的成员中
+				
+				HWND hWnd = ::CreateWindowEx(cs.dwExStyle, cs.lpszClass,
+				cs.lpszName, cs.style, cs.x, cs.y, cs.cx, cs.cy,
+				cs.hwndParent, cs.hMenu, cs.hInstance, cs.lpCreateParams);
+				//一旦窗口创建成功,立马被钩子勾走,执行钩子处理函数
+			}
+			
+		}
+	}
+}
+****************************************************
+钩子处理函数
+_AfxCbtFilterHook(int code, WPARAM wParam, LPARAM lParam){
+	_AFX_THREAD_STATE* pThreadState = _afxThreadState.GetData();	//获取全局变量ccc的地址
+	CWnd* pWndInit = pThreadState->m_pWndInit;	//取出框架的地址
+	HWND hWnd = (HWND)wParam;			//获取刚刚创建的窗口句柄
+//pFrame标示窗口
+//真正标实一个窗口的是句柄，而不是对象
+	pWndInit->Attach(hWnd);{		this=pWndInit=pFrame	//建立映射
+		CHandleMap* pMap = afxMapHWND(TRUE); {// create map if not exist
+		//类似数组的映射结构
+			pState->m_pmapHWND = new CHandleMap(RUNTIME_CLASS(CTempWnd),
+			offsetof(CWnd, m_hWnd));
+			return pState->m_pmapHWND;	//
+			pMap->SetPermanent(m_hWnd = hWndNew, this);{
+				函数内部this指针为pMap映射类对象地址
+				pMap->m_permanentMap[(LPVOID)h] = permOb;
+				//pMap->m_permanentMap[hWndNew] = pFrame;
+				用映射类对象找其值pState->m_pmapHWND由全局变量bbb
+			}
+		}
+		WNDPROC afxWndProc = AfxGetAfxWndProc();
+		oldWndProc = (WNDPROC)SetWindowLong(hWnd, GWL_WNDPROC,
+					(DWORD)afxWndProc);
+		//利用win32API函数将SetWindowLong将窗口处理函数，从DefWindowProc
+		//更改为afxWndProc()真正的处理函数
+	}
+}
+***************************************************
+
+以WM_CREATE为例
+AfxWndProc(hWnd....){
+	CWnd* pWnd = CWnd::FromHandlePermanent(hWnd);{	//从映射数组中
+		CHandleMap* pMap = afxMapHWND();{
+			AFX_MODULE_THREAD_STATE* pState = AfxGetModuleThreadState();	
+		//全局变量bbb
+			if (pState->m_pmapHWND == NULL && bCreate)
+			{
+				BOOL bEnable = AfxEnableMemoryTracking(FALSE);
+			#ifndef _AFX_PORTABLE
+				_PNH pnhOldHandler = AfxSetNewHandler(&AfxCriticalNewHandler);
+			#endif
+				pState->m_pmapHWND = new CHandleMap(RUNTIME_CLASS(CTempWnd),
+				offsetof(CWnd, m_hWnd));
+
+			#ifndef _AFX_PORTABLE
+				AfxSetNewHandler(pnhOldHandler);
+			#endif
+				AfxEnableMemoryTracking(bEnable);
+			}
+			return pState->m_pmapHWND;	//返回bbb对象中映射类对象地址
+		}
+		pWnd = (CWnd*)pMap->LookupPermanent(hWnd);{//this为pMap映射类对象地址
+			return m_permanentMap[hWnd];
+		}
+		return pWnd;
+	}
+
+	return AfxCallWndProc(pWnd, hWnd, nMsg, wParam, lParam);{pwnd==pFrame
+		lResult = pWnd->WindowProc(nMsg, wParam, lParam);{
+			//重写虚函数则回到自己的代码
+		}
+	}
+}
+
+***************************************************
+
+CWnd* PASCAL CWnd::FromHandlePermanent(HWND hWnd)
+{
+	CHandleMap* pMap = afxMapHWND();
+	CWnd* pWnd = NULL;
+	if (pMap != NULL)
+	{
+		// only look in the permanent map - does no allocations
+		pWnd = (CWnd*)pMap->LookupPermanent(hWnd);
+		ASSERT(pWnd == NULL || pWnd->m_hWnd == hWnd);
+	}
+	return pWnd;
+}
+
+
+inline CObject* CHandleMap::LookupPermanent(HANDLE h)
+	{ return (CObject*)m_permanentMap.GetValueAt((LPVOID)h); }
+***************************************************
+CHandleMap* PASCAL afxMapHWND(BOOL bCreate)
+{
+	AFX_MODULE_THREAD_STATE* pState = AfxGetModuleThreadState();	//全局变量bbb
+	if (pState->m_pmapHWND == NULL && bCreate)
+	{
+		BOOL bEnable = AfxEnableMemoryTracking(FALSE);
+#ifndef _AFX_PORTABLE
+		_PNH pnhOldHandler = AfxSetNewHandler(&AfxCriticalNewHandler);
+#endif
+		pState->m_pmapHWND = new CHandleMap(RUNTIME_CLASS(CTempWnd),
+			offsetof(CWnd, m_hWnd));
+
+#ifndef _AFX_PORTABLE
+		AfxSetNewHandler(pnhOldHandler);
+#endif
+		AfxEnableMemoryTracking(bEnable);
+	}
+	return pState->m_pmapHWND;
+}
+
+*************************************************************
+
+void CHandleMap::SetPermanent(HANDLE h, CObject* permOb)
+{
+	BOOL bEnable = AfxEnableMemoryTracking(FALSE);
+							//句柄本来就是索引
+	m_permanentMap[(LPVOID)h] = permOb;//pFrame		//以句柄作为索引
+	AfxEnableMemoryTracking(bEnable);
+}
+*************************************************************
+BOOL CWnd::Attach(HWND hWndNew)
+{
+	ASSERT(m_hWnd == NULL);     // only attach once, detach on destroy
+	ASSERT(FromHandlePermanent(hWndNew) == NULL);
+		// must not already be in permanent map
+
+	if (hWndNew == NULL)
+		return FALSE;
+
+	CHandleMap* pMap = afxMapHWND(TRUE); // create map if not exist
+	ASSERT(pMap != NULL);
+
+	pMap->SetPermanent(m_hWnd = hWndNew, this);
+////函数内部的this指针为  this=pWndInit=pFrame
+进入SetPermanet()则this指针为	pMap	参数中m_hWnd的this为pWndInit=pFrame,此时还未进入函数内部
+this还没有改变
+
+
+#ifndef _AFX_NO_OCC_SUPPORT
+	AttachControlSite(pMap);
+#endif
+
+	return TRUE;
+}
+**************************************************************
+void AFXAPI AfxHookWindowCreate(CWnd* pWnd)	//pWnd=this=pFrame  将pFrame的值传入线程信息bbb
+//钩子函数  WH_CBT只勾取窗口创建消息
+{
+	_AFX_THREAD_STATE* pThreadState = _afxThreadState.GetData();	|
+	if (pThreadState->m_pWndInit == pWnd)				|
+		return;							|
+									|
+	if (pThreadState->m_hHookOldCbtFilter == NULL)			|
+	{								|
+		pThreadState->m_hHookOldCbtFilter = ::SetWindowsHookEx(WH_CBT,
+			_AfxCbtFilterHook, NULL, ::GetCurrentThreadId());
+		if (pThreadState->m_hHookOldCbtFilter == NULL)
+			AfxThrowMemoryException();
+	}
+	ASSERT(pThreadState->m_hHookOldCbtFilter != NULL);
+	ASSERT(pWnd != NULL);
+	ASSERT(pWnd->m_hWnd == NULL);   // only do once
+
+	ASSERT(pThreadState->m_pWndInit == NULL);   // hook not already in progress
+	pThreadState->m_pWndInit = pWnd;	//pFrame保存在全局变量CCC的成员中
+}	
+
+LRESULT CALLBACK CBTProc(
+  int nCode,      // hook code
+  WPARAM wParam,  // depends on hook code
+  LPARAM lParam   // depends on hook code
+);
+
+LONG SetWindowLong(		//修改指定窗口的属性
+  HWND hWnd,       // handle to window
+  int nIndex,      // offset of value to set	GWL_WDNPROC-->
+  LONG dwNewLong   // new value			给窗口设置新的窗口处理函数
+);
+
+::SetWindowsHookEx(WH_CBT,	//只对WM_CREATE消息感兴趣,一旦出现马上够到
+			_AfxCbtFilterHook, NULL, ::GetCurrentThreadId());
+
+*******************************************************************************
+钩子处理函数
+_AfxCbtFilterHook(int code, WPARAM wParam, LPARAM lParam)
+{
+	_AFX_THREAD_STATE* pThreadState = _afxThreadState.GetData();
+	if (code != HCBT_CREATEWND)
+	{
+		// wait for HCBT_CREATEWND just pass others on...
+		return CallNextHookEx(pThreadState->m_hHookOldCbtFilter, code,
+			wParam, lParam);
+	}
+
+	ASSERT(lParam != NULL);
+	LPCREATESTRUCT lpcs = ((LPCBT_CREATEWND)lParam)->lpcs;
+	ASSERT(lpcs != NULL);
+
+	CWnd* pWndInit = pThreadState->m_pWndInit;
+	BOOL bContextIsDLL = afxContextIsDLL;
+	if (pWndInit != NULL || (!(lpcs->style & WS_CHILD) && !bContextIsDLL))
+	{
+		// Note: special check to avoid subclassing the IME window
+		if (_afxDBCS)
+		{
+			// check for cheap CS_IME style first...
+			if (GetClassLong((HWND)wParam, GCL_STYLE) & CS_IME)
+				goto lCallNextHook;
+
+			// get class name of the window that is being created
+			LPCTSTR pszClassName;
+			TCHAR szClassName[_countof("ime")+1];
+			if (HIWORD(lpcs->lpszClass))
+			{
+				pszClassName = lpcs->lpszClass;
+			}
+			else
+			{
+				szClassName[0] = '\0';
+				GlobalGetAtomName((ATOM)lpcs->lpszClass, szClassName, _countof(szClassName));
+				pszClassName = szClassName;
+			}
+
+			// a little more expensive to test this way, but necessary...
+			if (lstrcmpi(pszClassName, _T("ime")) == 0)
+				goto lCallNextHook;
+		}
+
+		ASSERT(wParam != NULL); // should be non-NULL HWND
+		HWND hWnd = (HWND)wParam;
+		WNDPROC oldWndProc;
+		if (pWndInit != NULL)
+		{
+#ifdef _AFXDLL
+			AFX_MANAGE_STATE(pWndInit->m_pModuleState);
+#endif
+
+			// the window should not be in the permanent map at this time
+			ASSERT(CWnd::FromHandlePermanent(hWnd) == NULL);
+
+			// connect the HWND to pWndInit...
+			pWndInit->Attach(hWnd);
+			// allow other subclassing to occur first
+			pWndInit->PreSubclassWindow();
+
+			WNDPROC *pOldWndProc = pWndInit->GetSuperWndProcAddr();
+			ASSERT(pOldWndProc != NULL);
+
+#ifndef _AFX_NO_CTL3D_SUPPORT
+			_AFX_CTL3D_STATE* pCtl3dState;
+			DWORD dwFlags;
+			if (!afxData.bWin4 && !bContextIsDLL &&
+				(pCtl3dState = _afxCtl3dState.GetDataNA()) != NULL &&
+				pCtl3dState->m_pfnSubclassDlgEx != NULL &&
+				(dwFlags = AfxCallWndProc(pWndInit, hWnd, WM_QUERY3DCONTROLS)) != 0)
+			{
+				// was the class registered with AfxWndProc?
+				WNDPROC afxWndProc = AfxGetAfxWndProc();
+				BOOL bAfxWndProc = ((WNDPROC)
+					GetWindowLong(hWnd, GWL_WNDPROC) == afxWndProc);
+
+				pCtl3dState->m_pfnSubclassDlgEx(hWnd, dwFlags);
+
+				// subclass the window if not already wired to AfxWndProc
+				if (!bAfxWndProc)
+				{
+					// subclass the window with standard AfxWndProc
+					oldWndProc = (WNDPROC)SetWindowLong(hWnd, GWL_WNDPROC,
+						(DWORD)afxWndProc);
+					ASSERT(oldWndProc != NULL);
+					*pOldWndProc = oldWndProc;
+				}
+			}
+			else
+#endif
+			{
+				// subclass the window with standard AfxWndProc
+				WNDPROC afxWndProc = AfxGetAfxWndProc();
+				oldWndProc = (WNDPROC)SetWindowLong(hWnd, GWL_WNDPROC,
+					(DWORD)afxWndProc);
+				ASSERT(oldWndProc != NULL);
+				if (oldWndProc != afxWndProc)
+					*pOldWndProc = oldWndProc;
+			}
+			pThreadState->m_pWndInit = NULL;
+		}
+		else
+		{
+			ASSERT(!bContextIsDLL);   // should never get here
+
+			// subclass the window with the proc which does gray backgrounds
+			oldWndProc = (WNDPROC)GetWindowLong(hWnd, GWL_WNDPROC);
+			if (oldWndProc != NULL && GetProp(hWnd, _afxOldWndProc) == NULL)
+			{
+				SetProp(hWnd, _afxOldWndProc, oldWndProc);
+				if ((WNDPROC)GetProp(hWnd, _afxOldWndProc) == oldWndProc)
+				{
+					GlobalAddAtom(_afxOldWndProc);
+					SetWindowLong(hWnd, GWL_WNDPROC,
+						(DWORD)(pThreadState->m_bDlgCreate ?
+							_AfxGrayBackgroundWndProc : _AfxActivationWndProc));
+					ASSERT(oldWndProc != NULL);
+				}
+			}
+		}
+	}
+
+lCallNextHook:
+	LRESULT lResult = CallNextHookEx(pThreadState->m_hHookOldCbtFilter, code,
+		wParam, lParam);
+
+#ifndef _AFXDLL
+	if (bContextIsDLL)
+	{
+		::UnhookWindowsHookEx(pThreadState->m_hHookOldCbtFilter);
+		pThreadState->m_hHookOldCbtFilter = NULL;
+	}
+#endif
+	return lResult;
+}
+
+*********************************************************************
+//给类名称赋值
+AFX_STATIC BOOL AFXAPI _AfxRegisterWithIcon(WNDCLASS* pWndCls,
+	LPCTSTR lpszClassName, UINT nIDIcon)
+{
+	pWndCls->lpszClassName = lpszClassName;	//窗口类名称
+	HINSTANCE hInst = AfxFindResourceHandle(
+		MAKEINTRESOURCE(nIDIcon), RT_GROUP_ICON);
+	if ((pWndCls->hIcon = ::LoadIcon(hInst, MAKEINTRESOURCE(nIDIcon))) == NULL)
+	{
+		// use default icon
+		pWndCls->hIcon = ::LoadIcon(NULL, IDI_APPLICATION);
+	}
+	return AfxRegisterClass(pWndCls);	//注册窗口类
+}
+ ***********************************************************************
+//注册窗口类  类名称为AfxFrameOrView42sd 应用程序局部窗口类
+BOOL AFXAPI AfxRegisterClass(WNDCLASS* lpWndClass)
+{
+	WNDCLASS wndcls;
+	if (GetClassInfo(lpWndClass->hInstance, lpWndClass->lpszClassName,
+		&wndcls))
+	{
+		// class already registered
+		return TRUE;
+	}
+
+	if (!::RegisterClass(lpWndClass))
+	{
+		TRACE1("Can't register window class named %s\n",
+			lpWndClass->lpszClassName);
+		return FALSE;
+	}
+
+	if (afxContextIsDLL)
+	{
+		AfxLockGlobals(CRIT_REGCLASSLIST);
+		TRY
+		{
+			// class registered successfully, add to registered list
+			AFX_MODULE_STATE* pModuleState = AfxGetModuleState();
+			LPTSTR lpszUnregisterList = pModuleState->m_szUnregisterList;
+			// the buffer is of fixed size -- ensure that it does not overflow
+			ASSERT(lstrlen(lpszUnregisterList) + 1 +
+				lstrlen(lpWndClass->lpszClassName) + 1 <
+				_countof(pModuleState->m_szUnregisterList));
+			// append classname + newline to m_szUnregisterList
+			lstrcat(lpszUnregisterList, lpWndClass->lpszClassName);
+			TCHAR szTemp[2];
+			szTemp[0] = '\n';
+			szTemp[1] = '\0';
+			lstrcat(lpszUnregisterList, szTemp);
+		}
+		CATCH_ALL(e)
+		{
+			AfxUnlockGlobals(CRIT_REGCLASSLIST);
+			THROW_LAST();
+			// Note: DELETE_EXCEPTION not required.
+		}
+		END_CATCH_ALL
+		AfxUnlockGlobals(CRIT_REGCLASSLIST);
+	}
+
+	return TRUE;
+}
+
+
+afxFrameOrView=AFX_WNDCLASS("FrameOrView")="AfxFrameOrView42sd"
+
+
+Afx    ::     this(隐含)
+
+BOOL CFrameWnd::Create(LPCTSTR lpszClassName,
+	LPCTSTR lpszWindowName,
+	DWORD dwStyle,
+	const RECT& rect,
+	CWnd* pParentWnd,
+	LPCTSTR lpszMenuName,
+	DWORD dwExStyle,
+	CCreateContext* pContext)
+{
+	HMENU hMenu = NULL;
+	if (lpszMenuName != NULL)
+	{
+		// load in a menu that will get destroyed when window gets destroyed
+		HINSTANCE hInst = AfxFindResourceHandle(lpszMenuName, RT_MENU);
+		if ((hMenu = ::LoadMenu(hInst, lpszMenuName)) == NULL)
+		//win32加载菜单
+	
+		{
+			TRACE0("Warning: failed to load menu for CFrameWnd.\n");
+			PostNcDestroy();            // perhaps delete the C++ object
+			return FALSE;
+		}
+	}
+
+	m_strTitle = lpszWindowName;    // save title for later
+
+	if (!CreateEx(dwExStyle, lpszClassName, lpszWindowName, dwStyle,
+		rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
+		pParentWnd->GetSafeHwnd(), hMenu, (LPVOID)pContext))
+	{
+		TRACE0("Warning: failed to create CFrameWnd.\n");
+		if (hMenu != NULL)
+			DestroyMenu(hMenu);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+
+_AFXWIN_INLINE HWND CWnd::GetSafeHwnd() const
+	{ return this == NULL ? NULL : m_hWnd; }
+****************************************************************************
+BOOL CWnd::CreateEx(DWORD dwExStyle, LPCTSTR lpszClassName,
+	LPCTSTR lpszWindowName, DWORD dwStyle,
+	int x, int y, int nWidth, int nHeight,
+	HWND hWndParent, HMENU nIDorHMenu, LPVOID lpParam)
+{
+	// allow modification of several common create parameters
+	CREATESTRUCT cs;
+	cs.dwExStyle = dwExStyle;
+	cs.lpszClass = lpszClassName;
+	cs.lpszName = lpszWindowName;
+	cs.style = dwStyle;
+	cs.x = x;
+	cs.y = y;
+	cs.cx = nWidth;
+	cs.cy = nHeight;
+	cs.hwndParent = hWndParent;
+	cs.hMenu = nIDorHMenu;
+	cs.hInstance = AfxGetInstanceHandle();
+	cs.lpCreateParams = lpParam;
+
+	if (!PreCreateWindow(cs))
+	{
+		PostNcDestroy();
+		return FALSE;
+	}
+
+	AfxHookWindowCreate(this);
+	HWND hWnd = ::CreateWindowEx(cs.dwExStyle, cs.lpszClass,
+			cs.lpszName, cs.style, cs.x, cs.y, cs.cx, cs.cy,
+			cs.hwndParent, cs.hMenu, cs.hInstance, cs.lpCreateParams);
+
+#ifdef _DEBUG
+	if (hWnd == NULL)
+	{
+		TRACE1("Warning: Window creation failed: GetLastError returns 0x%8.8X\n",
+			GetLastError());
+	}
+#endif
+
+	if (!AfxUnhookWindowCreate())
+		PostNcDestroy();        // cleanup if CreateWindowEx fails too soon
+
+	if (hWnd == NULL)
+		return FALSE;
+	ASSERT(hWnd == m_hWnd); // should have been set in send msg hook
+	return TRUE;
+}
+
+BOOL CFrameWnd::PreCreateWindow(CREATESTRUCT& cs)
+{
+	if (cs.lpszClass == NULL)
+	{
+		VERIFY(AfxDeferRegisterClass(AFX_WNDFRAMEORVIEW_REG));
+		cs.lpszClass = _afxWndFrameOrView;  // COLOR_WINDOW background
+	}
+
+	if ((cs.style & FWS_ADDTOTITLE) && afxData.bWin4)
+		cs.style |= FWS_PREFIXTITLE;
+
+	if (afxData.bWin4)
+		cs.dwExStyle |= WS_EX_CLIENTEDGE;
+
+	return TRUE;
+}
+
+*****************************************************************
+//注册窗口类
+BOOL AFXAPI AfxEndDeferRegisterClass(LONG fToRegister)
+{
+	// mask off all classes that are already registered
+	AFX_MODULE_STATE* pModuleState = AfxGetModuleState();
+	fToRegister &= ~pModuleState->m_fRegisteredClasses;
+	if (fToRegister == 0)
+		return TRUE;
+
+	LONG fRegisteredClasses = 0;
+
+	// common initialization
+	WNDCLASS wndcls;
+	memset(&wndcls, 0, sizeof(WNDCLASS));   // start with NULL defaults
+	wndcls.lpfnWndProc = DefWindowProc;	//
+	
+	//缺省窗口处理函数，无法退出
+	
+	wndcls.hInstance = AfxGetInstanceHandle();
+	wndcls.hCursor = afxData.hcurArrow;
+
+	INITCOMMONCONTROLSEX init;
+	init.dwSize = sizeof(init);
+
+	// work to register classes as specified by fToRegister, populate fRegisteredClasses as we go
+	if (fToRegister & AFX_WND_REG)
+	{
+		// Child windows - no brush, no icon, safest default class styles
+		wndcls.style = CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW;
+		wndcls.lpszClassName = _afxWnd;
+		if (AfxRegisterClass(&wndcls))
+			fRegisteredClasses |= AFX_WND_REG;
+	}
+	if (fToRegister & AFX_WNDOLECONTROL_REG)
+	{
+		// OLE Control windows - use parent DC for speed
+		wndcls.style |= CS_PARENTDC | CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW;
+		wndcls.lpszClassName = _afxWndOleControl;
+		if (AfxRegisterClass(&wndcls))
+			fRegisteredClasses |= AFX_WNDOLECONTROL_REG;
+	}
+	if (fToRegister & AFX_WNDCONTROLBAR_REG)
+	{
+		// Control bar windows
+		wndcls.style = 0;   // control bars don't handle double click
+		wndcls.lpszClassName = _afxWndControlBar;
+		wndcls.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+		if (AfxRegisterClass(&wndcls))
+			fRegisteredClasses |= AFX_WNDCONTROLBAR_REG;
+	}
+	if (fToRegister & AFX_WNDMDIFRAME_REG)
+	{
+		// MDI Frame window (also used for splitter window)
+		wndcls.style = CS_DBLCLKS;
+		wndcls.hbrBackground = NULL;
+		if (_AfxRegisterWithIcon(&wndcls, _afxWndMDIFrame, AFX_IDI_STD_MDIFRAME))
+			fRegisteredClasses |= AFX_WNDMDIFRAME_REG;
+	}
+	if (fToRegister & AFX_WNDFRAMEORVIEW_REG)
+	{
+		// SDI Frame or MDI Child windows or views - normal colors
+		wndcls.style = CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW;
+		wndcls.hbrBackground = (HBRUSH) (COLOR_WINDOW + 1);
+		if (_AfxRegisterWithIcon(&wndcls, _afxWndFrameOrView, AFX_IDI_STD_FRAME))
+
+///////////     -afxWndFrameOrView======"AfxFrameOrView42sd"
+			fRegisteredClasses |= AFX_WNDFRAMEORVIEW_REG;
+	}
+	if (fToRegister & AFX_WNDCOMMCTLS_REG)
+	{
+		// this flag is compatible with the old InitCommonControls() API
+		init.dwICC = ICC_WIN95_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WIN95CTLS_MASK);
+		fToRegister &= ~AFX_WIN95CTLS_MASK;
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_UPDOWN_REG)
+	{
+		init.dwICC = ICC_UPDOWN_CLASS;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_UPDOWN_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_TREEVIEW_REG)
+	{
+		init.dwICC = ICC_TREEVIEW_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_TREEVIEW_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_TAB_REG)
+	{
+		init.dwICC = ICC_TAB_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_TAB_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_PROGRESS_REG)
+	{
+		init.dwICC = ICC_PROGRESS_CLASS;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_PROGRESS_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_LISTVIEW_REG)
+	{
+		init.dwICC = ICC_LISTVIEW_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_LISTVIEW_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_HOTKEY_REG)
+	{
+		init.dwICC = ICC_HOTKEY_CLASS;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_HOTKEY_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_BAR_REG)
+	{
+		init.dwICC = ICC_BAR_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_BAR_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_ANIMATE_REG)
+	{
+		init.dwICC = ICC_ANIMATE_CLASS;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_ANIMATE_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_INTERNET_REG)
+	{
+		init.dwICC = ICC_INTERNET_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_INTERNET_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_COOL_REG)
+	{
+		init.dwICC = ICC_COOL_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_COOL_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_USEREX_REG)
+	{
+		init.dwICC = ICC_USEREX_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_USEREX_REG);
+	}
+	if (fToRegister & AFX_WNDCOMMCTL_DATE_REG)
+	{
+		init.dwICC = ICC_DATE_CLASSES;
+		fRegisteredClasses |= _AfxInitCommonControls(&init, AFX_WNDCOMMCTL_DATE_REG);
+	}
+
+	// save new state of registered controls
+	pModuleState->m_fRegisteredClasses |= fRegisteredClasses;
+
+	// special case for all common controls registered, turn on AFX_WNDCOMMCTLS_REG
+	if ((pModuleState->m_fRegisteredClasses & AFX_WIN95CTLS_MASK) == AFX_WIN95CTLS_MASK)
+	{
+		pModuleState->m_fRegisteredClasses |= AFX_WNDCOMMCTLS_REG;
+		fRegisteredClasses |= AFX_WNDCOMMCTLS_REG;
+	}
+
+	// must have registered at least as mamy classes as requested
+	return (fToRegister & fRegisteredClasses) == fToRegister;
+}

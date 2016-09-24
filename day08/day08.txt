@@ -1,0 +1,132 @@
+
+
+
+mfc绘图
+
+  绘图对象的使用,
+  CBitmap  使用
+    创建于当前dc的兼容dc   (内存中数据结构一样)
+    将位图选入兼容dc
+    将位图从兼容dc拷贝到当前dc
+    将位图从兼容dc中选出，恢复位图
+    删除兼容dc
+    删除位图对象
+
+    CRgn 复杂区域
+      创建几何区域
+	CRgn::CreateXXX
+      将两个几何区域进行运算，可以多次运算
+	CRgn::CombineRgn
+      填充区域
+	CDC::FillRgn
+      填充边框
+	CDC::FrameRgn
+
+	CWnd::SetWindowRgn	创建不规则窗口，按钮
+
+   CPalette  调色板,用来设置颜色,减少
+
+   MFC集合类
+	Arrays  动态数组
+		CArrays	模板类
+	Lists  链表(双向链表)
+		CList  模板类
+	Maps  映射
+		CMap   模板类
+
+
+	模板类 存储自定义类型的数据
+	非模板类  存储特定类型的数据
+
+	CArray
+	使用: 定义
+	template< class TYPE, class ARG_TYPE > class CArray : public CObject
+	TYPE 要存储的元素的类型
+	ARG_TYPE  CArray成员函数的参数类型
+	自定义的类需要，偶人构造，或者有默认的参数
+	集合会不时的调用默认构造
+	要预计要存储的元素的数量,设置数组的初始大小
+ 
+	CList
+	定义  参数与CArray相同
+	POSITION Find( ARG_TYPE searchValue, POSITION startAfter = NULL) const; 
+	调用Find函数需要重载==运算符
+
+
+	template< class KEY, class ARG_KEY, class VALUE, class ARG_VALUE >
+	class CMap : public CObject
+	查找元素 根据键查找值
+	Lookup
+
+***************************
+	key-->hashCode
+	nIndex=hashCode%nSize   
+*****************************************
+
+
+template<class KEY, class ARG_KEY, class VALUE, class ARG_VALUE>
+class CMap : public CObject
+{
+protected:
+	// Association
+	struct CAssoc
+	{
+		CAssoc* pNext;   //链表
+		UINT nHashValue;  // needed for efficient iteration
+		KEY key;
+		VALUE value;
+	};
+public:
+// Construction
+	CMap(int nBlockSize = 10);
+
+// Attributes
+	// number of elements
+	int GetCount() const;
+	BOOL IsEmpty() const;
+
+	// Lookup
+	BOOL Lookup(ARG_KEY key, VALUE& rValue) const;
+
+// Operations
+	// Lookup and add if not there
+	VALUE& operator[](ARG_KEY key);
+
+	// add a new (key, value) pair
+	void SetAt(ARG_KEY key, ARG_VALUE newValue);
+
+	// removing existing (key, ?) pair
+	BOOL RemoveKey(ARG_KEY key);
+	void RemoveAll();
+
+	// iterating all (key, value) pairs
+	POSITION GetStartPosition() const;
+	void GetNextAssoc(POSITION& rNextPosition, KEY& rKey, VALUE& rValue) const;
+
+	// advanced features for derived classes
+	UINT GetHashTableSize() const;
+	void InitHashTable(UINT hashSize, BOOL bAllocNow = TRUE);
+
+// Implementation
+protected:
+	CAssoc** m_pHashTable;
+	UINT m_nHashTableSize;
+	int m_nCount;
+	CAssoc* m_pFreeList;
+	struct CPlex* m_pBlocks;
+	int m_nBlockSize;
+
+	CAssoc* NewAssoc();
+	void FreeAssoc(CAssoc*);
+	CAssoc* GetAssocAt(ARG_KEY, UINT&) const;
+
+public:
+	~CMap();
+	void Serialize(CArchive&);
+#ifdef _DEBUG
+	void Dump(CDumpContext&) const;
+	void AssertValid() const;
+#endif
+};
+
+

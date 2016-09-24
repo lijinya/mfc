@@ -1,0 +1,279 @@
+//Microsoft Developer Studio generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "afxres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// Chinese (P.R.C.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+#ifdef _WIN32
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+#pragma code_page(936)
+#endif //_WIN32
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "#include ""afxres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "#define _AFX_NO_SPLITTER_RESOURCES\r\n"
+    "#define _AFX_NO_OLE_RESOURCES\r\n"
+    "#define _AFX_NO_TRACKER_RESOURCES\r\n"
+    "#define _AFX_NO_PROPERTY_RESOURCES\r\n"
+    "\r\n"
+    "#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)\r\n"
+    "#ifdef _WIN32\r\n"
+    "LANGUAGE 4, 2\r\n"
+    "#pragma code_page(936)\r\n"
+    "#endif //_WIN32\r\n"
+    "#include ""res\\MFCBaseCtrl.rc2""  // non-Microsoft Visual C++ edited resources\r\n"
+    "#include ""l.chs\\afxres.rc""          // Standard components\r\n"
+    "#endif\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDR_MAINFRAME           ICON    DISCARDABLE     "res\\MFCBaseCtrl.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUTBOX DIALOG DISCARDABLE  0, 0, 258, 175
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "关于 MFCBaseCtrl"
+FONT 9, "宋体"
+BEGIN
+    LISTBOX         IDC_LIST_LEFT,15,13,74,138,LBS_SORT | 
+                    LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      ">",IDC_BUTTON_TO_RIGHT,101,23,39,15
+    PUSHBUTTON      ">>",IDC_BUTTON_ALL_TO_RIGHT,100,59,41,16
+    PUSHBUTTON      "<",IDC_BUTTON_TO_LEFT,100,101,39,15
+    PUSHBUTTON      "<<",IDC_BUTTON_ALL_TO_LEFT,99,136,41,16
+    LISTBOX         IDC_LIST_RIGHT2,175,23,74,138,LBS_SORT | 
+                    LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
+END
+
+IDD_MFCBASECTRL_DIALOG DIALOGEX 0, 0, 384, 337
+STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_APPWINDOW
+CAPTION "MFCBaseCtrl"
+FONT 9, "宋体"
+BEGIN
+    GROUPBOX        "打开视频文件",IDC_STATIC,17,15,344,39
+    ICON            IDR_MAINFRAME,IDC_STATIC,26,29,21,21
+    LTEXT           "文件路径",IDC_STATIC,57,33,36,12
+    EDITTEXT        IDC_FILEPATH,99,33,161,12,ES_AUTOHSCROLL
+    PUSHBUTTON      "...",IDC_FILEOPEN,271,33,23,10
+    CONTROL         "Animate1",IDC_ANIMATE,"SysAnimate32",ACS_TRANSPARENT | 
+                    WS_BORDER | WS_TABSTOP,14,71,227,185
+    LTEXT           "文件列表 ",IDC_STATIC,250,63,49,12
+    LISTBOX         IDC_LIST_FILENAMES,249,76,111,136,LBS_SORT | 
+                    LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "重复播放",IDC_CHECK_REPLAY,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,251,225,51,10
+    COMBOBOX        IDC_COMBO_PLAYCOUNT,311,227,51,49,CBS_DROPDOWN | 
+                    WS_VSCROLL | WS_TABSTOP
+    CONTROL         "播放",IDC_RADIO_PLAY,"Button",BS_AUTORADIOBUTTON,253,
+                    245,32,8
+    CONTROL         "暂停",IDC_RADIO_PAUSE,"Button",BS_AUTORADIOBUTTON,309,
+                    249,39,8
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,6,271,371,1
+    CONTROL         "HotKey1",IDC_HOTKEY_SETUP,"msctls_hotkey32",WS_BORDER | 
+                    WS_TABSTOP,20,285,129,13
+    PUSHBUTTON      "设置",IDC_BUTTON_SETUP,173,287,72,13
+END
+
+IDD_DIALOG_COMMON_CTRL DIALOG DISCARDABLE  0, 0, 243, 162
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "通用控件"
+FONT 10, "System"
+BEGIN
+    EDITTEXT        IDC_EDIT1,18,20,68,23,ES_AUTOHSCROLL
+    CONTROL         "Spin1",IDC_SPIN1,"msctls_updown32",UDS_SETBUDDYINT | 
+                    UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS,102,20,14,
+                    24
+END
+
+
+#ifndef _MAC
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,1
+ PRODUCTVERSION 1,0,0,1
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x4L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404B0"
+        BEGIN
+            VALUE "CompanyName", "\0"
+            VALUE "FileDescription", "MFCBaseCtrl Microsoft 基础类应用程序\0"
+            VALUE "FileVersion", "1, 0, 0, 1\0"
+            VALUE "InternalName", "MFCBaseCtrl\0"
+            VALUE "LegalCopyright", "版权所有 (C) 2014\0"
+            VALUE "LegalTrademarks", "\0"
+            VALUE "OriginalFilename", "MFCBaseCtrl.EXE\0"
+            VALUE "ProductName", "MFCBaseCtrl 应用程序\0"
+            VALUE "ProductVersion", "1, 0, 0, 1\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END
+
+#endif    // !_MAC
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO DISCARDABLE 
+BEGIN
+    IDD_ABOUTBOX, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 251
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 168
+    END
+
+    IDD_MFCBASECTRL_DIALOG, DIALOG
+    BEGIN
+        LEFTMARGIN, 6
+        RIGHTMARGIN, 377
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 330
+    END
+
+    IDD_DIALOG_COMMON_CTRL, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 236
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 155
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Bitmap
+//
+
+IDB_BITMAP1             BITMAP  DISCARDABLE     "res\\bitmap1.bmp"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog Info
+//
+
+IDD_MFCBASECTRL_DIALOG DLGINIT
+BEGIN
+    IDC_COMBO_PLAYCOUNT, 0x403, 9, 0
+0xadd1, 0xb7bb, 0xa5b2, 0xc5b7, "\000" 
+    IDC_COMBO_PLAYCOUNT, 0x403, 2, 0
+0x0031, 
+    IDC_COMBO_PLAYCOUNT, 0x403, 2, 0
+0x0032, 
+    IDC_COMBO_PLAYCOUNT, 0x403, 2, 0
+0x0033, 
+    IDC_COMBO_PLAYCOUNT, 0x403, 2, 0
+0x0034, 
+    IDC_COMBO_PLAYCOUNT, 0x403, 2, 0
+0x0035, 
+    IDC_COMBO_PLAYCOUNT, 0x403, 2, 0
+0x0036, 
+    0
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    IDS_ABOUTBOX            "关于 MFCBaseCtrl(&A)..."
+END
+
+#endif    // Chinese (P.R.C.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+#define _AFX_NO_SPLITTER_RESOURCES
+#define _AFX_NO_OLE_RESOURCES
+#define _AFX_NO_TRACKER_RESOURCES
+#define _AFX_NO_PROPERTY_RESOURCES
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+#ifdef _WIN32
+LANGUAGE 4, 2
+#pragma code_page(936)
+#endif //_WIN32
+#include "res\MFCBaseCtrl.rc2"  // non-Microsoft Visual C++ edited resources
+#include "l.chs\afxres.rc"          // Standard components
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

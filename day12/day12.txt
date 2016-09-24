@@ -1,0 +1,40 @@
+属性页
+	相关类
+	CPropertyPage		页面对话框,多个标签,属性页,属于对话框类.
+	CPropertySheet		框架窗口,属性表单.
+	一个属性表单包含多个属性页.
+	分类:
+	标签式属性页	常用于参数、选项等配置。
+	向导式属性页	常用于引导用户，一步一步完成相关设置和操作。
+
+	标签式属性页的创建
+		插入属性页对话框资源,设置语言和对话框字体。并合并生成相应的类
+		注意父类的选择 CPropertyPage
+		在工程中添加CPropertySheet类的子类
+		在表单类中添加页面类的对象，并调用AddPage,将页面对象添加进来
+		调用表单类的DoModal函数，创建并显示窗口
+		消息处理 (重写虚函数)
+			CPropertyPage::OnApply
+			CPropertyPage::OnOK
+			CPropertyPage::OnCancel
+
+			注意调用SetModified(TRUE)将应用按钮设置为可用状态
+
+
+	向导式
+		插入属性页对话框资源,设置语言和对话框字体,并生成相应的类
+		注意父类的选择 CPropertyPage
+		在工程中添加CPropertySheet类的子类
+		在表单类中添加页面类的对象，并调用AddPage,将页面对象添加进来
+		调用表单类的DoModal函数，创建并显示窗口
+		每个页面显示自己的上一步下一步按钮。
+		
+		消息处理
+		CPropertyPage::OnSetActive  设置当前活动窗口。在此函数中设置
+		按钮的状态。
+		CpropertyPage::OnWizardBack
+		CpropertyPage::OnWizardNext
+		CpropertyPage::OnWizardFinish
+
+
+

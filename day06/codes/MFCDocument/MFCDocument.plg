@@ -1,0 +1,28 @@
+<html>
+<body>
+<pre>
+<h1>Build Log</h1>
+<h3>
+--------------------Configuration: MFCDocument - Win32 Debug--------------------
+</h3>
+<h3>Command Lines</h3>
+Creating temporary file "C:\Users\lijinya\AppData\Local\Temp\RSPF762.tmp" with contents
+[
+/nologo /MTd /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_MBCS" /Fp"Debug/MFCDocument.pch" /Yu"stdafx.h" /Fo"Debug/" /Fd"Debug/" /FD /GZ /c 
+"D:\mfc\day06\codes\MFCDocument\MFCDocument.cpp"
+]
+Creating command line "cl.exe @C:\Users\lijinya\AppData\Local\Temp\RSPF762.tmp" 
+Creating command line "link.exe /nologo /subsystem:windows /incremental:yes /pdb:"Debug/MFCDocument.pdb" /debug /machine:I386 /out:"Debug/MFCDocument.exe" /pdbtype:sept  .\Debug\MFCDocument.obj .\Debug\StdAfx.obj .\Debug\MFCDocument.res "
+<h3>Output Window</h3>
+Compiling...
+MFCDocument.cpp
+D:\mfc\day06\codes\MFCDocument\MFCDocument.cpp(116) : warning C4715: 'CMyFrameWnd::OnCmdMsg' : not all control paths return a value
+Linking...
+
+
+
+<h3>Results</h3>
+MFCDocument.exe - 0 error(s), 1 warning(s)
+</pre>
+</body>
+</html>
